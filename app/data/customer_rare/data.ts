@@ -3365,7 +3365,6 @@ export const CUSTOMER_RARE_LIST = [
 		positiveTags: [
 			'传说',
 			'和风',
-			'传说',
 			DYNAMIC_TAG_MAP.signature,
 			'适合拍照',
 			'凉爽',
