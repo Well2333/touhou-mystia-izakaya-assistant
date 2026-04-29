@@ -104,26 +104,26 @@ export default function SuggestedMealCard() {
 		() => new Map<number, Map<TIngredientName, TIngredientName[]>>()
 	);
 
-	const selectedCookerKeys = useMemo(
+	const selectedCookerKeys = useMemo<SelectionSet>(
 		() =>
-			(selectedSuggestMealsCooker === null
+			selectedSuggestMealsCooker === null
 				? toSet()
-				: toSet(selectedSuggestMealsCooker)) as SelectionSet,
+				: toSet(selectedSuggestMealsCooker),
 		[selectedSuggestMealsCooker]
 	);
 
-	const selectedMaxExtraKeys = useMemo(
+	const selectedMaxExtraKeys = useMemo<SelectionSet>(
 		() =>
 			toSet(
 				suggestMaxExtraIngredients === null
 					? ''
 					: suggestMaxExtraIngredients.toString()
-			) as SelectionSet,
+			),
 		[suggestMaxExtraIngredients]
 	);
 
-	const selectedMaxRatingKeys = useMemo(
-		() => toSet(suggestMaxRating.toString()) as SelectionSet,
+	const selectedMaxRatingKeys = useMemo<SelectionSet>(
+		() => toSet(suggestMaxRating.toString()),
 		[suggestMaxRating]
 	);
 

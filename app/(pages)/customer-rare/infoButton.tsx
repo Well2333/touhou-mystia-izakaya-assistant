@@ -1,4 +1,4 @@
-import { type ReactElement, memo } from 'react';
+import { memo } from 'react';
 
 import useBreakpoint from 'use-breakpoint';
 import { useViewInNewWindow } from '@/hooks';
@@ -380,9 +380,7 @@ export default function InfoButton() {
 						)}
 					</div>
 				</AccordionItem>
-			) : (
-				(null as unknown as ReactElement)
-			)}
+			) : null}
 			{hasSpellCards ? (
 				<AccordionItem
 					key="card"
@@ -462,12 +460,8 @@ export default function InfoButton() {
 						</div>
 					)}
 				</AccordionItem>
-			) : (
-				(null as unknown as ReactElement)
-			)}
-			{checkLengthEmpty(currentCustomerChat) ? (
-				(null as unknown as ReactElement)
-			) : (
+			) : null}
+			{checkLengthEmpty(currentCustomerChat) ? null : (
 				<AccordionItem
 					key="chat"
 					aria-label="闲聊对话"
