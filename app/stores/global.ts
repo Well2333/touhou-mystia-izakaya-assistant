@@ -36,8 +36,9 @@ import {
 	persist as persistMiddleware,
 	sync as syncMiddleware,
 } from '@/stores/middlewares';
-import type { IPopularTrend, TPopularTag } from '@/types';
+import type { IMealRecipe, IPopularTrend, TPopularTag } from '@/types';
 import {
+	checkArrayContainsOf,
 	generateRange,
 	numberSort,
 	pinyinSort,
@@ -80,6 +81,96 @@ const allDlcs = union(
 
 const instance_ingredient = Ingredient.getInstance();
 const instance_recipe = Recipe.getInstance();
+
+function checkRecipeDataHasHiddenBaseIngredient(
+	recipeData: IMealRecipe,
+	hiddenIngredients: ReadonlySet<TIngredientName>
+) {
+	try {
+		return checkArrayContainsOf(
+			instance_recipe.getPropsByName(recipeData.name, 'ingredients'),
+			hiddenIngredients
+		);
+	} catch {
+		return false;
+	}
+}
+
+function updateRecipeDataForHiddenItems(
+	recipeData: IMealRecipe,
+	hiddenIngredients: ReadonlySet<TIngredientName>,
+	hiddenRecipes: ReadonlySet<TRecipeName>
+): IMealRecipe | null | undefined {
+	if (
+		hiddenRecipes.has(recipeData.name) ||
+		checkRecipeDataHasHiddenBaseIngredient(recipeData, hiddenIngredients)
+	) {
+		return null;
+	}
+
+	const extraIngredients = recipeData.extraIngredients.filter(
+		(ingredientName) => !hiddenIngredients.has(ingredientName)
+	);
+
+	if (extraIngredients.length !== recipeData.extraIngredients.length) {
+		return { ...recipeData, extraIngredients };
+	}
+
+	return undefined;
+}
+
+function getNewlyHiddenItems<T>(
+	nextItems: ReadonlySet<T>,
+	previousItems: ReadonlySet<T>
+) {
+	return new Set([...nextItems].filter((item) => !previousItems.has(item)));
+}
+
+function clearHiddenBeverageSelections(
+	hiddenBeverages: ReadonlySet<TBeverageName>
+) {
+	const normalBeverageName = customerNormalStore.shared.beverage.name.get();
+	if (
+		normalBeverageName !== null &&
+		hiddenBeverages.has(normalBeverageName)
+	) {
+		customerNormalStore.shared.beverage.name.set(null);
+	}
+
+	const rareBeverageName = customerRareStore.shared.beverage.name.get();
+	if (rareBeverageName !== null && hiddenBeverages.has(rareBeverageName)) {
+		customerRareStore.shared.beverage.name.set(null);
+	}
+}
+
+function clearHiddenRecipeSelections(
+	hiddenIngredients: ReadonlySet<TIngredientName>,
+	hiddenRecipes: ReadonlySet<TRecipeName>
+) {
+	const normalRecipeData = customerNormalStore.shared.recipe.data.get();
+	if (normalRecipeData !== null) {
+		const nextNormalRecipeData = updateRecipeDataForHiddenItems(
+			normalRecipeData,
+			hiddenIngredients,
+			hiddenRecipes
+		);
+		if (nextNormalRecipeData !== undefined) {
+			customerNormalStore.shared.recipe.data.set(nextNormalRecipeData);
+		}
+	}
+
+	const rareRecipeData = customerRareStore.shared.recipe.data.get();
+	if (rareRecipeData !== null) {
+		const nextRareRecipeData = updateRecipeDataForHiddenItems(
+			rareRecipeData,
+			hiddenIngredients,
+			hiddenRecipes
+		);
+		if (nextRareRecipeData !== undefined) {
+			customerRareStore.shared.recipe.data.set(nextRareRecipeData);
+		}
+	}
+}
 
 const ingredientTags = instance_ingredient
 	.getValuesByProp('tags')
@@ -578,24 +669,51 @@ globalStore.persistence.table.row.onChange((row) => {
 	customerRareStore.shared.recipe.table.rows.set(toSet(rowString));
 });
 globalStore.persistence.table.hiddenItems.beverages.onChange((beverages) => {
+	const previousHiddenBeverages =
+		customerNormalStore.shared.beverage.table.hiddenBeverages.get();
+	const hiddenBeverages = toSet(beverages);
+	const newlyHiddenBeverages = getNewlyHiddenItems(
+		hiddenBeverages,
+		previousHiddenBeverages
+	);
 	customerNormalStore.shared.beverage.table.hiddenBeverages.set(
-		toSet(beverages)
+		hiddenBeverages
 	);
 	customerRareStore.shared.beverage.table.hiddenBeverages.set(
 		toSet(beverages)
 	);
+	clearHiddenBeverageSelections(newlyHiddenBeverages);
 });
 globalStore.persistence.table.hiddenItems.ingredients.onChange(
 	(ingredients) => {
+		const previousHiddenIngredients =
+			customerNormalStore.shared.recipe.table.hiddenIngredients.get();
+		const hiddenIngredients = toSet(ingredients);
+		const newlyHiddenIngredients = getNewlyHiddenItems(
+			hiddenIngredients,
+			previousHiddenIngredients
+		);
 		customerNormalStore.shared.recipe.table.hiddenIngredients.set(
-			toSet(ingredients)
+			hiddenIngredients
 		);
 		customerRareStore.shared.recipe.table.hiddenIngredients.set(
 			toSet(ingredients)
 		);
+		clearHiddenRecipeSelections(
+			newlyHiddenIngredients,
+			new Set<TRecipeName>()
+		);
 	}
 );
 globalStore.persistence.table.hiddenItems.recipes.onChange((recipes) => {
-	customerNormalStore.shared.recipe.table.hiddenRecipes.set(toSet(recipes));
+	const previousHiddenRecipes =
+		customerNormalStore.shared.recipe.table.hiddenRecipes.get();
+	const hiddenRecipes = toSet(recipes);
+	const newlyHiddenRecipes = getNewlyHiddenItems(
+		hiddenRecipes,
+		previousHiddenRecipes
+	);
+	customerNormalStore.shared.recipe.table.hiddenRecipes.set(hiddenRecipes);
 	customerRareStore.shared.recipe.table.hiddenRecipes.set(toSet(recipes));
+	clearHiddenRecipeSelections(new Set<TIngredientName>(), newlyHiddenRecipes);
 });

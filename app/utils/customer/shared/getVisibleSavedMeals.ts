@@ -1,7 +1,12 @@
 import { isNil } from 'lodash';
 
-import { type TDlc } from '@/data';
-import { checkLengthEmpty } from '@/utilities';
+import {
+	type TBeverageName,
+	type TDlc,
+	type TIngredientName,
+	type TRecipeName,
+} from '@/data';
+import { checkArrayContainsOf, checkLengthEmpty } from '@/utilities';
 
 export interface IVisibleSavedMealEntry<TMeal> {
 	dataIndex: number;
@@ -10,11 +15,18 @@ export interface IVisibleSavedMealEntry<TMeal> {
 }
 
 export function getVisibleSavedMeals<TMeal>({
+	hiddenBeverages = new Set<TBeverageName>(),
 	hiddenDlcs,
+	hiddenIngredients = new Set<TIngredientName>(),
+	hiddenRecipes = new Set<TRecipeName>(),
 	meals,
 	resolveDlcRefs,
+	resolveItemRefs,
 }: {
+	hiddenBeverages?: ReadonlySet<TBeverageName>;
 	hiddenDlcs: ReadonlySet<TDlc>;
+	hiddenIngredients?: ReadonlySet<TIngredientName>;
+	hiddenRecipes?: ReadonlySet<TRecipeName>;
 	meals: ReadonlyArray<TMeal> | null | undefined;
 	resolveDlcRefs: (
 		meal: TMeal
@@ -22,6 +34,13 @@ export function getVisibleSavedMeals<TMeal>({
 		beverageDlc: TDlc;
 		ingredientDlcs: ReadonlyArray<TDlc>;
 		recipeDlc: TDlc;
+	} | null;
+	resolveItemRefs?: (
+		meal: TMeal
+	) => {
+		beverageName: TBeverageName | null;
+		ingredientNames: ReadonlyArray<TIngredientName>;
+		recipeName: TRecipeName;
 	} | null;
 }): Array<IVisibleSavedMealEntry<TMeal>> {
 	if (isNil(meals) || checkLengthEmpty(meals)) {
@@ -43,6 +62,23 @@ export function getVisibleSavedMeals<TMeal>({
 			hasHiddenIngredientDlc ||
 			hiddenDlcs.has(dlcRefs.beverageDlc) ||
 			hiddenDlcs.has(dlcRefs.recipeDlc)
+		) {
+			return;
+		}
+
+		const itemRefs = resolveItemRefs?.(meal);
+		if (itemRefs === null) {
+			return;
+		}
+		if (
+			itemRefs !== undefined &&
+			((itemRefs.beverageName !== null &&
+				hiddenBeverages.has(itemRefs.beverageName)) ||
+				hiddenRecipes.has(itemRefs.recipeName) ||
+				checkArrayContainsOf(
+					itemRefs.ingredientNames,
+					hiddenIngredients
+				))
 		) {
 			return;
 		}

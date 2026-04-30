@@ -635,6 +635,15 @@ export const customerNormalStore = store(state, {
 			const hiddenDlcs = shouldGet
 				? currentStore.shared.hiddenItems.dlcs.get()
 				: currentStore.shared.hiddenItems.dlcs.use();
+			const hiddenBeverages = shouldGet
+				? currentStore.shared.beverage.table.hiddenBeverages.get()
+				: currentStore.shared.beverage.table.hiddenBeverages.use();
+			const hiddenIngredients = shouldGet
+				? currentStore.shared.recipe.table.hiddenIngredients.get()
+				: currentStore.shared.recipe.table.hiddenIngredients.use();
+			const hiddenRecipes = shouldGet
+				? currentStore.shared.recipe.table.hiddenRecipes.get()
+				: currentStore.shared.recipe.table.hiddenRecipes.use();
 			const currentPopularTrend = shouldGet
 				? currentStore.shared.customer.popularTrend.get()
 				: currentStore.shared.customer.popularTrend.use();
@@ -649,7 +658,10 @@ export const customerNormalStore = store(state, {
 			const currentCustomerMeals = savedMeals[currentCustomerName];
 
 			const visibleMeals = getVisibleSavedMeals({
+				hiddenBeverages,
 				hiddenDlcs,
+				hiddenIngredients,
+				hiddenRecipes,
 				meals: currentCustomerMeals,
 				resolveDlcRefs: (meal) => {
 					try {
@@ -672,6 +684,25 @@ export const customerNormalStore = store(state, {
 								meal.recipe.name,
 								'dlc'
 							),
+						};
+					} catch {
+						return null;
+					}
+				},
+				resolveItemRefs: (meal) => {
+					try {
+						const recipeIngredients =
+							instance_recipe.getPropsByName(
+								meal.recipe.name,
+								'ingredients'
+							);
+						return {
+							beverageName: meal.beverage,
+							ingredientNames: [
+								...recipeIngredients,
+								...meal.recipe.extraIngredients,
+							],
+							recipeName: meal.recipe.name,
 						};
 					} catch {
 						return null;
