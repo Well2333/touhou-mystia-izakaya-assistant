@@ -21,6 +21,7 @@ import type { IMealRecipe, IPopularTrend } from '@/types';
 import {
 	checkArrayContainsOf,
 	checkLengthEmpty,
+	createBoundedRuntimeCache,
 	intersection,
 	toArray,
 	toSet,
@@ -71,7 +72,6 @@ const SCORE_MAP: Record<TRatingKey, number> = {
 
 const BEAM_WIDTH = 3;
 const BUDGET_OVER_PENALTY = 500;
-const CACHE_MAX_SIZE = 200;
 const GAME_DAY_HOURS = 8;
 
 const CROSS_DLC_MAP_WEIGHT = 0.25;
@@ -2025,15 +2025,13 @@ export function getScoreBasedAlternatives({
 	return result;
 }
 
-const suggestCache = new Map<string, ISuggestedMeal[]>();
+const suggestCache = createBoundedRuntimeCache<string, ISuggestedMeal[]>();
 
 export function suggestMeals(params: ISuggestParams) {
 	const cacheKey = buildCacheKey(params);
 
 	const cached = suggestCache.get(cacheKey);
 	if (cached !== undefined) {
-		suggestCache.delete(cacheKey);
-		suggestCache.set(cacheKey, cached);
 		return cached;
 	}
 
@@ -2045,13 +2043,6 @@ export function suggestMeals(params: ISuggestParams) {
 			: computeSuggestions(params, context);
 
 	suggestCache.set(cacheKey, result);
-
-	if (suggestCache.size > CACHE_MAX_SIZE) {
-		const oldestKey = suggestCache.keys().next().value;
-		if (oldestKey !== undefined) {
-			suggestCache.delete(oldestKey);
-		}
-	}
 
 	return result;
 }

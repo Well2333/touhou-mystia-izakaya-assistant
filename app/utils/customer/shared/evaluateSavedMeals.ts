@@ -32,17 +32,15 @@ const instance_customer_rare = CustomerRare.getInstance();
 const instance_ingredient = Ingredient.getInstance();
 const instance_recipe = Recipe.getInstance();
 
-const SAVED_MEAL_RATING_CACHE_MAX_SIZE = 1024;
-
 const normalSavedMealRatingCache = createBoundedRuntimeCache<
 	string,
 	TRatingKey
->(SAVED_MEAL_RATING_CACHE_MAX_SIZE);
+>();
 
 const rareSavedMealRatingCache = createBoundedRuntimeCache<
 	string,
 	IRareSavedMealEvaluation
->(SAVED_MEAL_RATING_CACHE_MAX_SIZE);
+>();
 
 export function evaluateNormalSavedMeal({
 	customerName,

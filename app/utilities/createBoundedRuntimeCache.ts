@@ -4,7 +4,7 @@ interface IBoundedRuntimeCache<K, V> {
 	set(key: K, value: V): void;
 }
 
-export function createBoundedRuntimeCache<K, V>(maxSize: number) {
+export function createBoundedRuntimeCache<K, V>(maxSize = 1024) {
 	if (!Number.isInteger(maxSize) || maxSize < 0) {
 		throw new RangeError(
 			'[utilities/createBoundedRuntimeCache] maxSize must be an integer >= 0'
