@@ -1,9 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 
-import { useVibrate } from '@/hooks';
-
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCircleXmark } from '@fortawesome/free-solid-svg-icons';
+import { useAutoHideTooltip, useVibrate } from '@/hooks';
 
 import {
 	Button,
@@ -14,20 +11,27 @@ import {
 	cn,
 } from '@/design/ui/components';
 
-import { Plus, UnknownItem } from '@/(pages)/customer-rare/resultCard';
+import CurrentMealIngredientsList from '@/(pages)/customer-shared/currentMealIngredientsList';
+import { Plus, UnknownItem } from '@/(pages)/customer-shared/resultCardAtoms';
 import Placeholder from '@/components/placeholder';
 import Sprite from '@/components/sprite';
 
 import { CUSTOMER_RATING_MAP, type TIngredientName } from '@/data';
 import { customerNormalStore as customerStore, globalStore } from '@/stores';
-import { checkA11yConfirmKey, toArray } from '@/utilities';
 
-export { Plus } from '@/(pages)/customer-rare/resultCard';
+export { Plus } from '@/(pages)/customer-shared/resultCardAtoms';
 
-function IngredientsList() {
+export default function ResultCard() {
 	const vibrate = useVibrate();
 
+	const isHighAppearance = globalStore.persistence.highAppearance.use();
+
+	const currentCustomerName = customerStore.shared.customer.name.use();
+	const currentBeverageName = customerStore.shared.beverage.name.use();
 	const currentRecipeData = customerStore.shared.recipe.data.use();
+	const currentRating = customerStore.shared.customer.rating.use();
+	const savedCustomerMealsWithEvaluation =
+		customerStore.savedCustomerMealsWithEvaluation.use();
 
 	const instance_recipe = customerStore.instances.recipe.get();
 
@@ -42,135 +46,20 @@ function IngredientsList() {
 		[currentRecipeData, instance_recipe]
 	);
 
-	const filledIngredients = useMemo(
-		() =>
-			toArray<Array<TIngredientName | null>>(
-				originalIngredients,
-				currentRecipeData?.extraIngredients ?? [],
-				new Array<null>(5).fill(null)
-			).slice(0, 5),
-		[currentRecipeData?.extraIngredients, originalIngredients]
-	);
+	const isSaveButtonDisabled =
+		currentCustomerName === null ||
+		currentRecipeData === null ||
+		currentRating === null;
+	const { isTooltipOpen: isShowSaveButtonTooltip, showTooltip } =
+		useAutoHideTooltip(!isSaveButtonDisabled);
 
-	const handleRemoveButtonPress = useCallback(
+	const handleRemoveIngredient = useCallback(
 		(ingredient: TIngredientName) => {
 			vibrate();
 			customerStore.removeMealIngredient(ingredient);
 		},
 		[vibrate]
 	);
-
-	return (
-		<div className="flex items-center gap-x-3">
-			{filledIngredients.map((ingredient, index) =>
-				ingredient ? (
-					index >= originalIngredients.length ? (
-						(() => {
-							const label = `点击：删除额外食材【${ingredient}】`;
-							return (
-								<Tooltip
-									key={index}
-									showArrow
-									content={label}
-									offset={4}
-								>
-									<span
-										onKeyDown={checkA11yConfirmKey(() => {
-											handleRemoveButtonPress(ingredient);
-										})}
-										tabIndex={0}
-										aria-label={label}
-										className="flex items-center"
-									>
-										<span
-											onClick={() => {
-												handleRemoveButtonPress(
-													ingredient
-												);
-											}}
-											role="button"
-											tabIndex={1}
-											title={ingredient}
-											className="absolute flex h-10 w-10 cursor-pointer items-center justify-center rounded-small bg-foreground/50 text-background opacity-0 transition-opacity hover:opacity-100 motion-reduce:transition-none"
-										>
-											<FontAwesomeIcon
-												icon={faCircleXmark}
-												size="1x"
-											/>
-										</span>
-										<Sprite
-											target="ingredient"
-											name={ingredient}
-											size={2.5}
-										/>
-									</span>
-								</Tooltip>
-							);
-						})()
-					) : (
-						<Tooltip
-							key={index}
-							showArrow
-							content={ingredient}
-							offset={4}
-						>
-							<Sprite
-								target="ingredient"
-								name={ingredient}
-								size={2.5}
-							/>
-						</Tooltip>
-					)
-				) : (
-					<UnknownItem key={index} title="空食材" />
-				)
-			)}
-		</div>
-	);
-}
-
-export default function ResultCard() {
-	const vibrate = useVibrate();
-
-	const isHighAppearance = globalStore.persistence.highAppearance.use();
-
-	const currentCustomerName = customerStore.shared.customer.name.use();
-	const currentBeverageName = customerStore.shared.beverage.name.use();
-	const currentRecipeData = customerStore.shared.recipe.data.use();
-	const currentRating = customerStore.shared.customer.rating.use();
-	const currentSavedMeals = customerStore.persistence.meals.use();
-
-	const instance_recipe = customerStore.instances.recipe.get();
-
-	const saveButtonTooltipTimer = useRef<NodeJS.Timeout | undefined>(
-		undefined
-	);
-	const [isShowSaveButtonTooltip, setIsShowSaveButtonTooltip] =
-		useState(false);
-	const isSaveButtonDisabled =
-		currentCustomerName === null ||
-		currentRecipeData === null ||
-		currentRating === null;
-
-	const hideTooltip = useCallback(() => {
-		setIsShowSaveButtonTooltip(false);
-		clearTimeout(saveButtonTooltipTimer.current);
-	}, []);
-
-	useEffect(
-		() => () => {
-			clearTimeout(saveButtonTooltipTimer.current);
-		},
-		[]
-	);
-
-	const showTooltip = useCallback(() => {
-		setIsShowSaveButtonTooltip(true);
-		clearTimeout(saveButtonTooltipTimer.current);
-		saveButtonTooltipTimer.current = setTimeout(() => {
-			hideTooltip();
-		}, 3000);
-	}, [hideTooltip]);
 
 	const handleSaveButtonPress = useCallback(() => {
 		if (isSaveButtonDisabled) {
@@ -181,22 +70,15 @@ export default function ResultCard() {
 		}
 	}, [isSaveButtonDisabled, showTooltip, vibrate]);
 
-	useEffect(() => {
-		if (isShowSaveButtonTooltip && !isSaveButtonDisabled) {
-			hideTooltip();
-		}
-	}, [hideTooltip, isSaveButtonDisabled, isShowSaveButtonTooltip]);
-
 	let content: IFadeMotionDivProps['children'];
 	let contentClassName: IFadeMotionDivProps['className'];
 	let contentTarget: IFadeMotionDivProps['target'];
 	let contentVariant: IFadeMotionDivProps['variant'];
+	const hasVisibleSavedMeals =
+		(savedCustomerMealsWithEvaluation?.length ?? 0) > 0;
 
 	if (currentBeverageName === null && currentRecipeData === null) {
-		if (
-			currentCustomerName !== null &&
-			currentSavedMeals[currentCustomerName]?.length
-		) {
+		if (hasVisibleSavedMeals) {
 			content = null;
 			contentClassName = '';
 			contentTarget = 'null';
@@ -274,7 +156,13 @@ export default function ResultCard() {
 							)}
 						</div>
 						<Plus />
-						<IngredientsList />
+						<CurrentMealIngredientsList
+							extraIngredients={
+								currentRecipeData?.extraIngredients ?? []
+							}
+							onRemoveExtraIngredient={handleRemoveIngredient}
+							originalIngredients={originalIngredients}
+						/>
 					</div>
 					<Tooltip
 						showArrow

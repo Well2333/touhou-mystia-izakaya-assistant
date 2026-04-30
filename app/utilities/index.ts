@@ -3,10 +3,12 @@ export * from './object';
 export * from './string';
 
 export * from './filterItems';
+export * from './getSearchResult';
 export * from './pinyin';
 export * from './sort';
 
 export * from './checkA11yConfirmKey';
+export * from './createBoundedRuntimeCache';
 export * from './getPageTitle';
 export * from './memoize';
 export * from './processJsonFile';

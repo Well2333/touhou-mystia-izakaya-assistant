@@ -18,7 +18,8 @@ import {
 } from '@/design/ui/components';
 
 import InfoButton from './infoButton';
-import TagGroup from './tagGroup';
+import RatingAvatarShell from '@/(pages)/customer-shared/ratingAvatarShell';
+import TagGroup from '@/(pages)/customer-shared/tagGroup';
 import { trackEvent } from '@/components/analytics';
 import FontAwesomeIconButton from '@/components/fontAwesomeIconButton';
 import Price from '@/components/price';
@@ -35,6 +36,7 @@ import {
 } from '@/data';
 import { customerRareStore as customerStore, globalStore } from '@/stores';
 import { checkLengthEmpty, copyArray, pinyinSort } from '@/utilities';
+import { buildRareTagTooltip } from '@/utils/customer/shared';
 
 export default function CustomerCard() {
 	const { pushState } = usePathname();
@@ -58,6 +60,7 @@ export default function CustomerCard() {
 	const currentRecipeData = customerStore.shared.recipe.data.use();
 	const currentRecipeTagsWithTrend =
 		customerStore.shared.recipe.tagsWithTrend.use();
+	const unsatisfiedSelectionTip = customerStore.unsatisfiedSelectionTip.use();
 
 	const isHighAppearance = globalStore.persistence.highAppearance.use();
 	const isShowTagsTooltip =
@@ -121,36 +124,9 @@ export default function CustomerCard() {
 		[currentBeverageName, instance_beverage]
 	);
 
-	const avatarRatingContent = useMemo(() => {
-		if (hasRating) {
-			return CUSTOMER_RATING_MAP[currentRating];
-		}
-
-		const target = [];
-		if (currentBeverageName === null) {
-			target.push('酒水');
-		}
-		if (currentRecipeData === null) {
-			target.push('料理');
-		}
-		if ((isDarkMatter && hasMystiaCooker) || !hasMystiaCooker) {
-			target.push('顾客点单需求');
-		}
-
-		let content = target.join('、');
-		if (!isDarkMatter && !hasMystiaCooker) {
-			content += '或标记为使用“夜雀”系列厨具';
-		}
-
-		return `请选择${content}以评级`;
-	}, [
-		currentBeverageName,
-		currentRating,
-		currentRecipeData,
-		hasMystiaCooker,
-		hasRating,
-		isDarkMatter,
-	]);
+	const avatarRatingContent = hasRating
+		? CUSTOMER_RATING_MAP[currentRating]
+		: unsatisfiedSelectionTip.rating;
 
 	const avatarRatingColor = hasRating
 		? (`${currentRating}-border` as const)
@@ -158,27 +134,15 @@ export default function CustomerCard() {
 	const tooltipRatingColor = hasRating ? currentRating : undefined;
 
 	const getTagTooltip = useCallback(
-		(type: keyof typeof currentCustomerOrder, tag: string) => {
-			const tagType = type === 'beverageTag' ? '酒水' : '料理';
-			const isCurrentTag = currentCustomerOrder[type] === tag;
-			const isNormalMeal = hasMystiaCooker && !isDarkMatter;
-
-			const cookerTip = '已使用“夜雀”系列厨具无视顾客点单需求';
-			const orderTip = isNormalMeal
-				? isOrderLinkedFilter
-					? ''
-					: cookerTip
-				: `点击：${isCurrentTag ? '不再' : ''}将此标签视为顾客点单需求`;
-			const filterTip = isOrderLinkedFilter
-				? `${isNormalMeal ? '点击：' : '并'}${
-						isCurrentTag
-							? `取消筛选${tagType}表格`
-							: `以此标签筛选${tagType}表格`
-					}${isNormalMeal ? `（${cookerTip}）` : ''}`
-				: '';
-
-			return `${orderTip}${filterTip}`;
-		},
+		(type: keyof typeof currentCustomerOrder, tag: string) =>
+			buildRareTagTooltip({
+				currentOrderTag: currentCustomerOrder[type],
+				hasMystiaCooker,
+				isDarkMatter: Boolean(isDarkMatter),
+				isOrderLinkedFilter,
+				tag,
+				type,
+			}),
 		[
 			currentCustomerOrder,
 			hasMystiaCooker,
@@ -197,39 +161,22 @@ export default function CustomerCard() {
 		dlc: currentCustomerDlc,
 		enduranceLimit: currentCustomerEnduranceLimit,
 		negativeTags: currentCustomerNegativeTags,
-		places: currentCustomerPlaces,
 		positiveTagMapping: currentCustomerPositiveTagMapping,
 		positiveTags: currentCustomerPositiveTags,
 		price: currentCustomerPrice,
-		spellCards: currentCustomerSpellCards,
 	} = instance_customer.getPropsByName(currentCustomerName);
+	const {
+		averagePrice: currentCustomerAveragePrice,
+		enduranceLimitPercent: currentCustomerEnduranceLimitPercent,
+		hasEnduranceLimit,
+		hasNegativeSpellCards,
+		hasOtherPlaces,
+		mainPlace: currentCustomerMainPlace,
+		placeContent,
+	} = instance_customer.getDisplayMeta(currentCustomerName);
 
 	const { label: dlcLabel, shortLabel: dlcShortLabel } =
 		DLC_LABEL_MAP[currentCustomerDlc];
-
-	const copiedCurrentCustomerPlaces = copyArray(currentCustomerPlaces);
-	const currentCustomerMainPlace = copiedCurrentCustomerPlaces.shift();
-
-	const hasOtherPlaces = !checkLengthEmpty(copiedCurrentCustomerPlaces);
-
-	const placeContent = hasOtherPlaces
-		? `其他出没地区：${copiedCurrentCustomerPlaces.join('、')}`
-		: '暂未收录其他出没地区';
-
-	const hasSpellCards = !checkLengthEmpty(
-		Object.keys(currentCustomerSpellCards)
-	);
-	const hasNegativeSpellCards =
-		hasSpellCards &&
-		'negative' in currentCustomerSpellCards &&
-		!checkLengthEmpty<unknown>(currentCustomerSpellCards.negative);
-
-	const currentCustomerAveragePrice =
-		(currentCustomerPrice[0] + currentCustomerPrice[1]) / 2;
-	const currentCustomerEnduranceLimitPercent = Math.floor(
-		currentCustomerEnduranceLimit * 100 - 100
-	);
-	const hasEnduranceLimit = currentCustomerEnduranceLimitPercent > 0;
 
 	const enduranceLimitContent = (
 		<div>
@@ -292,17 +239,12 @@ export default function CustomerCard() {
 		>
 			<div className="flex flex-col gap-3 p-4 md:flex-row">
 				<div className="flex flex-col justify-evenly gap-2">
-					<Popover
-						showArrow
+					<RatingAvatarShell
 						color={tooltipRatingColor}
-						offset={hasRating ? 13 : 9}
-					>
-						<Tooltip
-							showArrow
-							color={tooltipRatingColor}
-							content={avatarRatingContent}
-							offset={hasRating ? 9 : 5}
-						>
+						content={avatarRatingContent}
+						popoverOffset={hasRating ? 13 : 9}
+						tooltipOffset={hasRating ? 9 : 5}
+						trigger={
 							<div className="flex cursor-pointer self-center">
 								<PopoverTrigger>
 									<div
@@ -338,9 +280,8 @@ export default function CustomerCard() {
 									</div>
 								</PopoverTrigger>
 							</div>
-						</Tooltip>
-						<PopoverContent>{avatarRatingContent}</PopoverContent>
-					</Popover>
+						}
+					/>
 					<div className="whitespace-nowrap text-tiny font-medium text-default-800">
 						<p className="flex justify-between gap-10">
 							<Popover

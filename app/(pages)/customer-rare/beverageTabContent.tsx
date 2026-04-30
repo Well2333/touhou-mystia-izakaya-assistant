@@ -1,18 +1,10 @@
 import { useCallback, useMemo } from 'react';
 
-import { getSearchResult, useVibrate, useViewInNewWindow } from '@/hooks';
+import { useVibrate, useViewInNewWindow } from '@/hooks';
 
 import { Autocomplete, AutocompleteItem } from '@heroui/autocomplete';
 import { Select, SelectItem } from '@heroui/select';
-import {
-	type SortDescriptor,
-	Table,
-	TableBody,
-	TableCell,
-	TableColumn,
-	TableHeader,
-	TableRow,
-} from '@heroui/table';
+import { type SortDescriptor } from '@heroui/table';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
 	faChevronDown,
@@ -27,7 +19,6 @@ import {
 	DropdownItem,
 	DropdownMenu,
 	DropdownTrigger,
-	Pagination,
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
@@ -37,37 +28,23 @@ import {
 	useReducedMotion,
 } from '@/design/ui/components';
 
-import TagGroup from './tagGroup';
+import BeverageTableShell from '@/(pages)/customer-shared/beverageTableShell';
+import TagGroup from '@/(pages)/customer-shared/tagGroup';
 import FontAwesomeIconButton from '@/components/fontAwesomeIconButton';
-import Placeholder from '@/components/placeholder';
 import Price from '@/components/price';
 import Sprite from '@/components/sprite';
 import Tags from '@/components/tags';
 
-import { beverageTableColumns as tableColumns } from './constants';
-import type {
-	ITableColumn,
-	ITableSortDescriptor,
-	TBeverageWithSuitability,
-	TBeveragesWithSuitability,
-} from './types';
+import { beverageTableColumns } from '@/(pages)/customer-shared/constants';
+import type { TBeverageTableColumnKey } from '@/(pages)/customer-shared/types';
 import { CUSTOMER_RARE_TAG_STYLE, DLC_LABEL_MAP } from '@/data';
 import { customerRareStore as customerStore, globalStore } from '@/stores';
+import { checkLengthEmpty, toSet } from '@/utilities';
 import {
-	checkArraySubsetOf,
-	checkLengthEmpty,
-	copyArray,
-	numberSort,
-	pinyinSort,
-	toArray,
-	toSet,
-} from '@/utilities';
-
-export type TTableColumnKey = 'beverage' | 'price' | 'suitability' | 'action';
-export type TTableColumns = Array<ITableColumn<TTableColumnKey>>;
-
-type TTableSortKey = Exclude<TTableColumnKey, 'action'>;
-export type TTableSortDescriptor = ITableSortDescriptor<TTableSortKey>;
+	type ITableSortDescriptor,
+	type TBeverageSuitabilityRow,
+	type TBeverageTableSortKey,
+} from '@/utils/customer/shared';
 
 export default function BeverageTabContent() {
 	const isReducedMotion = useReducedMotion();
@@ -84,17 +61,11 @@ export default function BeverageTabContent() {
 	const currentBeverageName = customerStore.shared.beverage.name.use();
 	const selectedDlcs = customerStore.beverageTableDlcs.use();
 
-	const instance_beverage = customerStore.instances.beverage.get();
-	const instance_customer = customerStore.instances.customer.get();
-
 	const availableBeverageDlcs = customerStore.availableBeverageDlcs.use();
 	const availableBeverageNames = customerStore.availableBeverageNames.use();
 	const availableBeverageTags = customerStore.availableBeverageTags.use();
 
-	const hiddenDlcs = customerStore.shared.hiddenItems.dlcs.use();
-
 	const searchValue = customerStore.shared.beverage.searchValue.use();
-	const hasNameFilter = Boolean(searchValue);
 
 	const tableCurrentPage = customerStore.shared.beverage.table.page.use();
 	const tableRowsPerPage = customerStore.shared.beverage.table.rows.use();
@@ -107,123 +78,27 @@ export default function BeverageTabContent() {
 	const tableVisibleColumns =
 		customerStore.shared.beverage.table.columns.use();
 
-	const hiddenBeverages =
-		customerStore.shared.beverage.table.hiddenBeverages.use();
-
-	const data = useMemo(
-		() =>
-			instance_beverage.data.filter(
-				({ dlc }) => !hiddenDlcs.has(dlc)
-			) as TBeveragesWithSuitability,
-		[hiddenDlcs, instance_beverage.data]
-	);
-
-	const filteredData = useMemo<TBeveragesWithSuitability>(() => {
-		if (currentCustomerName === null) {
-			return data.map((item) => ({
-				...item,
-				matchedTags: [],
-				suitability: 0,
-			}));
-		}
-
-		const beverageTags = instance_customer.getPropsByName(
-			currentCustomerName,
-			'beverageTags'
-		);
-
-		const dataWithRealSuitability = data
-			.map((item) => {
-				const { suitability, tags: matchedTags } =
-					instance_beverage.getCustomerSuitability(
-						item.name,
-						beverageTags
-					);
-
-				return { ...item, matchedTags, suitability };
-			})
-			.filter(({ name }) => !hiddenBeverages.has(name));
-
-		if (
-			checkLengthEmpty(selectedCustomerBeverageTag) &&
-			checkLengthEmpty(selectedDlcs) &&
-			!hasNameFilter
-		) {
-			return dataWithRealSuitability;
-		}
-
-		return dataWithRealSuitability.filter(({ dlc, name, pinyin, tags }) => {
-			const isNameMatched = hasNameFilter
-				? getSearchResult(searchValue, { name, pinyin })
-				: true;
-			const isDlcMatched =
-				checkLengthEmpty(selectedDlcs) ||
-				selectedDlcs.has(dlc.toString());
-			const isTagsMatched =
-				checkLengthEmpty(selectedCustomerBeverageTag) ||
-				checkArraySubsetOf(toArray(selectedCustomerBeverageTag), tags);
-
-			return isNameMatched && isDlcMatched && isTagsMatched;
-		});
-	}, [
-		currentCustomerName,
-		data,
-		hasNameFilter,
-		hiddenBeverages,
-		instance_beverage,
-		instance_customer,
-		searchValue,
-		selectedCustomerBeverageTag,
-		selectedDlcs,
-	]);
-
-	const sortedData = useMemo(() => {
-		const { column, direction } = tableSortDescriptor;
-		const isAscending = direction === 'ascending';
-
-		switch (column) {
-			case 'beverage':
-				return copyArray(filteredData).sort(
-					({ name: a }, { name: b }) =>
-						isAscending ? pinyinSort(a, b) : pinyinSort(b, a)
-				);
-			case 'price':
-				return copyArray(filteredData).sort(
-					({ price: a }, { price: b }) =>
-						isAscending ? numberSort(a, b) : numberSort(b, a)
-				);
-			case 'suitability':
-				return copyArray(filteredData).sort(
-					({ suitability: a }, { suitability: b }) =>
-						isAscending ? numberSort(a, b) : numberSort(b, a)
-				);
-			default:
-				return filteredData;
-		}
-	}, [filteredData, tableSortDescriptor]);
-
-	const tableCurrentPageItems = useMemo(() => {
-		const start = (tableCurrentPage - 1) * tableRowsPerPageNumber;
-		const end = start + tableRowsPerPageNumber;
-
-		return sortedData.slice(start, end);
-	}, [sortedData, tableCurrentPage, tableRowsPerPageNumber]);
+	const tableCurrentPageItems = customerStore.beverageTablePagedRows.use();
+	const tableSortedRows = customerStore.beverageTableSortedRows.use();
 
 	const tableHeaderColumns = useMemo(
-		() => tableColumns.filter(({ key }) => tableVisibleColumns.has(key)),
+		() =>
+			beverageTableColumns.filter(({ key }) =>
+				tableVisibleColumns.has(key)
+			),
 		[tableVisibleColumns]
 	);
 
 	const tableTotalPages = Math.ceil(
-		filteredData.length / tableRowsPerPageNumber
+		tableSortedRows.length / tableRowsPerPageNumber
 	);
 
 	const tableSelectedKeys = toSet(currentBeverageName ?? '');
 
 	const renderTableCell = useCallback(
 		(
-			beverageData: TBeverageWithSuitability,
-			columnKey: TTableColumnKey
+			beverageData: TBeverageSuitabilityRow,
+			columnKey: TBeverageTableColumnKey
 		) => {
 			const {
 				matchedTags,
@@ -536,9 +411,9 @@ export default function BeverageTabContent() {
 									[
 										'action',
 										'beverage',
-									] satisfies TTableColumnKey[]
+									] satisfies TBeverageTableColumnKey[]
 								}
-								items={tableColumns}
+								items={beverageTableColumns}
 								selectedKeys={tableVisibleColumns}
 								selectionMode="multiple"
 								variant="flat"
@@ -560,7 +435,7 @@ export default function BeverageTabContent() {
 					</div>
 				</div>
 				<div className="flex items-center justify-between text-small text-default-700">
-					<span>总计{filteredData.length}种酒水</span>
+					<span>总计{tableSortedRows.length}种酒水</span>
 					<label className="flex items-center gap-2">
 						<span className="cursor-auto whitespace-nowrap">
 							表格行数
@@ -614,13 +489,13 @@ export default function BeverageTabContent() {
 			availableBeverageDlcs,
 			availableBeverageNames,
 			availableBeverageTags,
-			filteredData.length,
 			isHighAppearance,
 			isReducedMotion,
 			popoverMotionProps,
 			searchValue,
 			selectedCustomerBeverageTag,
 			selectedDlcs,
+			tableSortedRows.length,
 			tableRowsPerPage,
 			tableSelectableRows,
 			tableVisibleColumns,
@@ -628,98 +503,28 @@ export default function BeverageTabContent() {
 		]
 	);
 
-	const tablePagination = useMemo(
-		() => (
-			<div className="flex justify-center pt-2">
-				{!checkLengthEmpty(tableCurrentPageItems) && (
-					<Pagination
-						/** @todo Add it back after {@link https://github.com/heroui-inc/heroui/issues/4275} is fixed. */
-						// showControls
-						showShadow
-						size="sm"
-						page={tableCurrentPage}
-						total={tableTotalPages}
-						onChange={(page) => {
-							vibrate();
-							customerStore.onBeverageTablePageChange(page);
-						}}
-						classNames={{
-							item: cn('bg-default/40', {
-								'backdrop-blur': isHighAppearance,
-							}),
-						}}
-					/>
-				)}
-			</div>
-		),
-		[
-			isHighAppearance,
-			tableCurrentPage,
-			tableCurrentPageItems,
-			tableTotalPages,
-			vibrate,
-		]
-	);
-
 	return (
-		<Table
-			isHeaderSticky
-			bottomContent={tablePagination}
-			bottomContentPlacement="outside"
-			disableAnimation={isReducedMotion}
-			selectedKeys={tableSelectedKeys}
-			selectionMode="single"
-			sortDescriptor={tableSortDescriptor as SortDescriptor}
-			topContent={tableToolbar}
-			topContentPlacement="outside"
+		<BeverageTableShell
+			isHighAppearance={isHighAppearance}
+			isReducedMotion={isReducedMotion}
+			headerColumns={tableHeaderColumns}
+			items={tableCurrentPageItems}
+			onPageChange={(page) => {
+				vibrate();
+				customerStore.onBeverageTablePageChange(page);
+			}}
 			onSortChange={(config) => {
 				vibrate();
 				customerStore.onBeverageTableSortChange(
-					config as TTableSortDescriptor
+					config as ITableSortDescriptor<TBeverageTableSortKey>
 				);
 			}}
-			aria-label="酒水选择表格"
-			classNames={{
-				base: 'gap-2',
-				td: 'before:bg-default-200/70 before:transition-colors-opacity motion-reduce:before:transition-none',
-				th: cn('bg-default-200/70', {
-					'backdrop-blur-sm': isHighAppearance,
-				}),
-				thead: '[&>tr[tabindex="-1"]]:invisible',
-				wrapper: cn(
-					'bg-content1/40 xl:max-h-[calc(var(--safe-h-dvh)-17.5rem)] xl:p-2',
-					{ 'backdrop-blur': isHighAppearance }
-				),
-			}}
-		>
-			<TableHeader columns={tableHeaderColumns}>
-				{({ key, label, sortable }) => (
-					<TableColumn
-						key={key}
-						align={key === 'action' ? 'center' : 'start'}
-						allowsSorting={sortable}
-					>
-						{label}
-					</TableColumn>
-				)}
-			</TableHeader>
-			<TableBody
-				emptyContent={<Placeholder>数据为空</Placeholder>}
-				items={tableCurrentPageItems}
-			>
-				{(item) => (
-					<TableRow key={item.name}>
-						{(columnKey) => (
-							<TableCell>
-								{renderTableCell(
-									item,
-									columnKey as TTableColumnKey
-								)}
-							</TableCell>
-						)}
-					</TableRow>
-				)}
-			</TableBody>
-		</Table>
+			page={tableCurrentPage}
+			renderCell={renderTableCell}
+			selectedKeys={tableSelectedKeys}
+			sortDescriptor={tableSortDescriptor as SortDescriptor}
+			topContent={tableToolbar}
+			totalPages={tableTotalPages}
+		/>
 	);
 }

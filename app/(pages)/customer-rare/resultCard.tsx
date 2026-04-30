@@ -1,14 +1,7 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import useBreakpoint from 'use-breakpoint';
-import { useVibrate } from '@/hooks';
-
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import {
-	faCircleXmark,
-	faPlus,
-	faQuestion,
-} from '@fortawesome/free-solid-svg-icons';
+import { useAutoHideTooltip, useVibrate } from '@/hooks';
 
 import {
 	Button,
@@ -19,6 +12,8 @@ import {
 	cn,
 } from '@/design/ui/components';
 
+import CurrentMealIngredientsList from '@/(pages)/customer-shared/currentMealIngredientsList';
+import { Plus, UnknownItem } from '@/(pages)/customer-shared/resultCardAtoms';
 import Placeholder from '@/components/placeholder';
 import Price from '@/components/price';
 import Sprite from '@/components/sprite';
@@ -29,167 +24,6 @@ import {
 	type TIngredientName,
 } from '@/data';
 import { customerRareStore as customerStore, globalStore } from '@/stores';
-import { checkA11yConfirmKey, toArray } from '@/utilities';
-
-interface IPlusProps extends Pick<HTMLSpanElementAttributes, 'className'> {
-	size?: number;
-}
-
-export const Plus = memo<IPlusProps>(function Plus({ className, size = 1 }) {
-	const remString = `${size}rem`;
-
-	return (
-		<span
-			className={cn('mx-1 text-center leading-none', className)}
-			style={{ fontSize: remString, width: remString }}
-		>
-			<FontAwesomeIcon icon={faPlus} />
-		</span>
-	);
-});
-
-interface IUnknownItemProps extends Pick<
-	HTMLSpanElementAttributes,
-	'className' | 'title'
-> {
-	size?: number;
-}
-
-export const UnknownItem = memo<IUnknownItemProps>(function UnknownItem({
-	className,
-	size = 2,
-	title,
-}) {
-	const remString = `${size}rem`;
-
-	return (
-		<Tooltip showArrow content={title} offset={7 + -8 * (size - 2)}>
-			<span
-				role="img"
-				title={title}
-				className={cn(
-					'outline-3 flex items-center justify-center rounded-small p-0.5 text-center leading-none outline-double',
-					className
-				)}
-				style={{
-					fontSize: remString,
-					height: remString,
-					width: remString,
-				}}
-			>
-				<FontAwesomeIcon
-					icon={faQuestion}
-					className="!h-full rotate-12"
-				/>
-			</span>
-		</Tooltip>
-	);
-});
-
-function IngredientsList() {
-	const vibrate = useVibrate();
-
-	const currentRecipeData = customerStore.shared.recipe.data.use();
-
-	const instance_recipe = customerStore.instances.recipe.get();
-
-	const originalIngredients = useMemo(
-		() =>
-			currentRecipeData
-				? instance_recipe.getPropsByName(
-						currentRecipeData.name,
-						'ingredients'
-					)
-				: [],
-		[currentRecipeData, instance_recipe]
-	);
-
-	const filledIngredients = useMemo(
-		() =>
-			toArray<Array<TIngredientName | null>>(
-				originalIngredients,
-				currentRecipeData?.extraIngredients ?? [],
-				new Array<null>(5).fill(null)
-			).slice(0, 5),
-		[currentRecipeData?.extraIngredients, originalIngredients]
-	);
-
-	const handleRemoveButtonPress = useCallback(
-		(ingredient: TIngredientName) => {
-			vibrate();
-			customerStore.removeMealIngredient(ingredient);
-		},
-		[vibrate]
-	);
-
-	return (
-		<div className="flex items-center gap-x-3">
-			{filledIngredients.map((ingredient, index) =>
-				ingredient ? (
-					index >= originalIngredients.length ? (
-						(() => {
-							const label = `点击：删除额外食材【${ingredient}】`;
-							return (
-								<Tooltip
-									key={index}
-									showArrow
-									content={label}
-									offset={4}
-								>
-									<span
-										onKeyDown={checkA11yConfirmKey(() => {
-											handleRemoveButtonPress(ingredient);
-										})}
-										tabIndex={0}
-										aria-label={label}
-										className="flex items-center"
-									>
-										<span
-											onClick={() => {
-												handleRemoveButtonPress(
-													ingredient
-												);
-											}}
-											role="button"
-											tabIndex={1}
-											title={ingredient}
-											className="absolute flex h-10 w-10 cursor-pointer items-center justify-center rounded-small bg-foreground/50 text-background opacity-0 transition-opacity hover:opacity-100 motion-reduce:transition-none"
-										>
-											<FontAwesomeIcon
-												icon={faCircleXmark}
-												size="1x"
-											/>
-										</span>
-										<Sprite
-											target="ingredient"
-											name={ingredient}
-											size={2.5}
-										/>
-									</span>
-								</Tooltip>
-							);
-						})()
-					) : (
-						<Tooltip
-							key={index}
-							showArrow
-							content={ingredient}
-							offset={4}
-						>
-							<Sprite
-								target="ingredient"
-								name={ingredient}
-								size={2.5}
-							/>
-						</Tooltip>
-					)
-				) : (
-					<UnknownItem key={index} title="空食材" />
-				)
-			)}
-		</div>
-	);
-}
 
 export default function ResultCard() {
 	const { breakpoint: placement } = useBreakpoint(
@@ -203,20 +37,27 @@ export default function ResultCard() {
 	const currentCustomerName = customerStore.shared.customer.name.use();
 	const currentCustomerOrder = customerStore.shared.customer.order.use();
 	const currentBeverageName = customerStore.shared.beverage.name.use();
+	const currentMealPrice = customerStore.currentMealPrice.use();
 	const currentRecipeData = customerStore.shared.recipe.data.use();
 	const currentRating = customerStore.shared.customer.rating.use();
-	const currentSavedMeals = customerStore.persistence.meals.use();
 	const hasMystiaCooker = customerStore.shared.customer.hasMystiaCooker.use();
 	const isDarkMatter = customerStore.shared.customer.isDarkMatter.use();
+	const savedCustomerMealsWithEvaluation =
+		customerStore.savedCustomerMealsWithEvaluation.use();
+	const unsatisfiedSelectionTip = customerStore.unsatisfiedSelectionTip.use();
 
-	const instance_beverage = customerStore.instances.beverage.get();
 	const instance_recipe = customerStore.instances.recipe.get();
-
-	const saveButtonTooltipTimer = useRef<NodeJS.Timeout | undefined>(
-		undefined
+	const originalIngredients = useMemo(
+		() =>
+			currentRecipeData
+				? instance_recipe.getPropsByName(
+						currentRecipeData.name,
+						'ingredients'
+					)
+				: [],
+		[currentRecipeData, instance_recipe]
 	);
-	const [isShowSaveButtonTooltip, setIsShowSaveButtonTooltip] =
-		useState(false);
+
 	const isSaveButtonDisabled =
 		currentCustomerName === null ||
 		(currentCustomerOrder.beverageTag === null && !hasMystiaCooker) ||
@@ -224,26 +65,8 @@ export default function ResultCard() {
 		currentBeverageName === null ||
 		currentRecipeData === null ||
 		currentRating === null;
-
-	const hideTooltip = useCallback(() => {
-		setIsShowSaveButtonTooltip(false);
-		clearTimeout(saveButtonTooltipTimer.current);
-	}, []);
-
-	useEffect(
-		() => () => {
-			clearTimeout(saveButtonTooltipTimer.current);
-		},
-		[]
-	);
-
-	const showTooltip = useCallback(() => {
-		setIsShowSaveButtonTooltip(true);
-		clearTimeout(saveButtonTooltipTimer.current);
-		saveButtonTooltipTimer.current = setTimeout(() => {
-			hideTooltip();
-		}, 3000);
-	}, [hideTooltip]);
+	const { isTooltipOpen: isShowSaveButtonTooltip, showTooltip } =
+		useAutoHideTooltip(!isSaveButtonDisabled);
 
 	const handleCookerPress = useCallback(() => {
 		if (isDarkMatter) {
@@ -252,6 +75,14 @@ export default function ResultCard() {
 		vibrate();
 		customerStore.toggleMystiaCooker();
 	}, [isDarkMatter, vibrate]);
+
+	const handleRemoveIngredient = useCallback(
+		(ingredient: TIngredientName) => {
+			vibrate();
+			customerStore.removeMealIngredient(ingredient);
+		},
+		[vibrate]
+	);
 
 	const handleSaveButtonPress = useCallback(() => {
 		if (isSaveButtonDisabled) {
@@ -262,31 +93,7 @@ export default function ResultCard() {
 		}
 	}, [isSaveButtonDisabled, showTooltip, vibrate]);
 
-	useEffect(() => {
-		if (isShowSaveButtonTooltip && !isSaveButtonDisabled) {
-			hideTooltip();
-		}
-	}, [hideTooltip, isSaveButtonDisabled, isShowSaveButtonTooltip]);
-
-	const saveButtonTooltip = useMemo(() => {
-		const target = [];
-		if (currentBeverageName === null) {
-			target.push('酒水');
-		}
-		if (currentRecipeData === null) {
-			target.push('料理');
-		}
-		if ((isDarkMatter && hasMystiaCooker) || !hasMystiaCooker) {
-			target.push('顾客点单需求');
-		}
-
-		let content = target.join('、');
-		if (!isDarkMatter && !hasMystiaCooker) {
-			content += '或标记为使用“夜雀”系列厨具';
-		}
-
-		return `请选择${content}以保存`;
-	}, [currentBeverageName, currentRecipeData, hasMystiaCooker, isDarkMatter]);
+	const saveButtonTooltip = unsatisfiedSelectionTip.save;
 
 	let content: IFadeMotionDivProps['children'];
 	let contentClassName: IFadeMotionDivProps['className'];
@@ -295,12 +102,11 @@ export default function ResultCard() {
 
 	const isSuggestMealsVisible =
 		customerStore.shared.suggestMeals.visibility.use();
+	const hasVisibleSavedMeals =
+		(savedCustomerMealsWithEvaluation?.length ?? 0) > 0;
 
 	if (currentBeverageName === null && currentRecipeData === null) {
-		if (
-			currentCustomerName !== null &&
-			currentSavedMeals[currentCustomerName]?.length
-		) {
+		if (hasVisibleSavedMeals) {
 			content = null;
 			contentClassName = '';
 			contentTarget = 'null';
@@ -422,7 +228,13 @@ export default function ResultCard() {
 							)}
 						</div>
 						<Plus />
-						<IngredientsList />
+						<CurrentMealIngredientsList
+							extraIngredients={
+								currentRecipeData?.extraIngredients ?? []
+							}
+							onRemoveExtraIngredient={handleRemoveIngredient}
+							originalIngredients={originalIngredients}
+						/>
 					</div>
 					<Tooltip
 						showArrow
@@ -444,22 +256,7 @@ export default function ResultCard() {
 						>
 							<span>保存套餐</span>
 							<span>
-								<Price>
-									{(currentBeverageName
-										? instance_beverage.getPropsByName(
-												currentBeverageName,
-												'price'
-											)
-										: 0) +
-										(currentRecipeData?.name
-											? isDarkMatter
-												? DARK_MATTER_META_MAP.price
-												: instance_recipe.getPropsByName(
-														currentRecipeData.name,
-														'price'
-													)
-											: 0)}
-								</Price>
+								<Price>{currentMealPrice}</Price>
 							</span>
 						</Button>
 					</Tooltip>

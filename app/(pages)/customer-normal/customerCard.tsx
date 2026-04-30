@@ -3,7 +3,6 @@ import { useCallback, useMemo } from 'react';
 import { usePathname, useVibrate } from '@/hooks';
 
 import { Divider } from '@heroui/divider';
-import { type Selection } from '@heroui/table';
 import { faArrowsRotate, faXmark } from '@fortawesome/free-solid-svg-icons';
 
 import { ratingStyles } from '@/design/theme/styles/rating';
@@ -19,7 +18,8 @@ import {
 } from '@/design/ui/components';
 
 import InfoButton from './infoButton';
-import TagGroup from './tagGroup';
+import RatingAvatarShell from '@/(pages)/customer-shared/ratingAvatarShell';
+import TagGroup from '@/(pages)/customer-shared/tagGroup';
 import { trackEvent } from '@/components/analytics';
 import FontAwesomeIconButton from '@/components/fontAwesomeIconButton';
 import Sprite from '@/components/sprite';
@@ -35,6 +35,7 @@ import {
 } from '@/data';
 import { customerNormalStore as customerStore, globalStore } from '@/stores';
 import { checkLengthEmpty, copyArray, pinyinSort } from '@/utilities';
+import { buildNormalTagTooltip } from '@/utils/customer/shared';
 
 export default function CustomerCard() {
 	const { pushState } = usePathname();
@@ -119,14 +120,9 @@ export default function CustomerCard() {
 	const getTagTooltip = useCallback(
 		(
 			type: 'beverageTag' | 'recipeTag',
-			selectedTags: Selection,
+			selectedTags: SelectionSet,
 			tag: string
-		) => {
-			const tagType = type === 'beverageTag' ? '酒水' : '料理';
-			const isTagExisted = (selectedTags as SelectionSet).has(tag);
-
-			return `点击：${isTagExisted ? `取消筛选${tagType}表格` : `以此标签筛选${tagType}表格`}`;
-		},
+		) => buildNormalTagTooltip({ selectedTags, tag, type }),
 		[]
 	);
 
@@ -137,21 +133,16 @@ export default function CustomerCard() {
 	const {
 		beverageTags: currentCustomerBeverageTags,
 		dlc: currentCustomerDlc,
-		places: currentCustomerPlaces,
 		positiveTags: currentCustomerPositiveTags,
 	} = instance_customer.getPropsByName(currentCustomerName);
+	const {
+		hasOtherPlaces,
+		mainPlace: currentCustomerMainPlace,
+		placeContent,
+	} = instance_customer.getDisplayMeta(currentCustomerName);
 
 	const { label: dlcLabel, shortLabel: dlcShortLabel } =
 		DLC_LABEL_MAP[currentCustomerDlc];
-
-	const copiedCurrentCustomerPlaces = copyArray(currentCustomerPlaces);
-	const currentCustomerMainPlace = copiedCurrentCustomerPlaces.shift();
-
-	const hasOtherPlaces = !checkLengthEmpty(copiedCurrentCustomerPlaces);
-
-	const placeContent = hasOtherPlaces
-		? `其他出没地区：${copiedCurrentCustomerPlaces.join('、')}`
-		: '暂未收录其他出没地区';
 
 	return (
 		<Card
@@ -171,17 +162,12 @@ export default function CustomerCard() {
 		>
 			<div className="flex flex-col gap-3 p-4 md:flex-row">
 				<div className="flex flex-col justify-evenly gap-2">
-					<Popover
-						showArrow
+					<RatingAvatarShell
 						color={tooltipRatingColor}
-						offset={hasRating ? 13 : 9}
-					>
-						<Tooltip
-							showArrow
-							color={tooltipRatingColor}
-							content={avatarRatingContent}
-							offset={hasRating ? 9 : 5}
-						>
+						content={avatarRatingContent}
+						popoverOffset={hasRating ? 13 : 9}
+						tooltipOffset={hasRating ? 9 : 5}
+						trigger={
 							<div className="flex cursor-pointer self-center">
 								<PopoverTrigger>
 									<div
@@ -222,9 +208,8 @@ export default function CustomerCard() {
 									</div>
 								</PopoverTrigger>
 							</div>
-						</Tooltip>
-						<PopoverContent>{avatarRatingContent}</PopoverContent>
-					</Popover>
+						}
+					/>
 					<div className="whitespace-nowrap text-tiny font-medium text-default-800">
 						<p className="flex justify-between gap-10">
 							<Popover

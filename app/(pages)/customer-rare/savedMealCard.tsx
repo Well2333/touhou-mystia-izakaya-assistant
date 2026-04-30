@@ -1,29 +1,29 @@
-import { Fragment, memo, useMemo } from 'react';
+import { Fragment } from 'react';
 
 import { usePictureInPicture, useVibrate, useViewInNewWindow } from '@/hooks';
 
 import { Divider } from '@heroui/divider';
-import {
-	FontAwesomeIcon,
-	type FontAwesomeIconProps,
-} from '@fortawesome/react-fontawesome';
-import { faArrowDown, faArrowUp } from '@fortawesome/free-solid-svg-icons';
 
 import {
 	Avatar,
-	Button,
 	Card,
 	FadeMotionDiv,
 	type IFadeMotionDivProps,
-	Popover,
-	PopoverContent,
 	PopoverTrigger,
 	Tooltip,
 	cn,
 } from '@/design/ui/components';
 
-import { Plus } from './resultCard';
-import TagGroup from './tagGroup';
+import SavedMealActionRail from '@/(pages)/customer-shared/savedMealActionRail';
+import SavedMealIngredientsStrip from '@/(pages)/customer-shared/savedMealIngredientsStrip';
+import { swapSavedMeals } from '@/(pages)/customer-shared/swapSavedMeals';
+import {
+	type IMoveButtonProps,
+	MoveButton,
+} from '@/(pages)/customer-shared/moveButton';
+import RatingAvatarShell from '@/(pages)/customer-shared/ratingAvatarShell';
+import { Plus } from '@/(pages)/customer-shared/resultCardAtoms';
+import TagGroup from '@/(pages)/customer-shared/tagGroup';
 import { trackEvent } from '@/components/analytics';
 import Price from '@/components/price';
 import Sprite from '@/components/sprite';
@@ -34,69 +34,13 @@ import {
 	CUSTOMER_RATING_MAP,
 	DARK_MATTER_META_MAP,
 	RECIPE_TAG_STYLE,
-	type TDlc,
 } from '@/data';
 import { customerRareStore as customerStore, globalStore } from '@/stores';
-import { checkLengthEmpty, copyArray } from '@/utilities';
 
-const moveButtonDirectionMap = { down: 0, up: 1 } as const;
-
-type TMoveButtonDirection = ExtractCollectionValue<
-	typeof moveButtonDirectionMap
->;
-
-export interface IMoveButtonProps extends Pick<
-	FontAwesomeIconProps,
-	'onClick'
-> {
-	direction: TMoveButtonDirection;
-	isDisabled: boolean;
-}
-
-const MoveButtonComponent = memo<IMoveButtonProps>(function MoveButton({
-	direction,
-	isDisabled,
-	onClick,
-}) {
-	return (
-		<Tooltip
-			showArrow
-			content={
-				direction === moveButtonDirectionMap.down
-					? isDisabled
-						? '已是末项'
-						: '下移此项'
-					: isDisabled
-						? '已是首项'
-						: '上移此项'
-			}
-			offset={5}
-			placement="left"
-			size="sm"
-		>
-			<FontAwesomeIcon
-				icon={
-					direction === moveButtonDirectionMap.down
-						? faArrowDown
-						: faArrowUp
-				}
-				size="1x"
-				onClick={onClick}
-				role="button"
-				className={cn(
-					'cursor-pointer text-default transition-colors hover:text-default-400 motion-reduce:transition-none',
-					{ 'cursor-not-allowed hover:text-default-200': isDisabled }
-				)}
-			/>
-		</Tooltip>
-	);
-});
-
-export const MoveButton = MoveButtonComponent as typeof MoveButtonComponent & {
-	direction: typeof moveButtonDirectionMap;
-};
-
-MoveButton.direction = moveButtonDirectionMap;
+export {
+	type IMoveButtonProps,
+	MoveButton,
+} from '@/(pages)/customer-shared/moveButton';
 
 export default function SavedMealCard() {
 	const {
@@ -111,101 +55,24 @@ export default function SavedMealCard() {
 
 	const isHighAppearance = globalStore.persistence.highAppearance.use();
 
-	const hiddenDlcs = customerStore.shared.hiddenItems.dlcs.use();
-
 	const currentCustomerName = customerStore.shared.customer.name.use();
-	const currentCustomerPopularTrend =
-		customerStore.shared.customer.popularTrend.use();
-	const currentSavedMeals = customerStore.persistence.meals.use();
-	const isFamousShop = customerStore.shared.customer.famousShop.use();
+	const savedMeals = customerStore.persistence.meals.use();
+	const currentCustomerMeals =
+		currentCustomerName === null
+			? null
+			: (savedMeals[currentCustomerName] ?? null);
+	const savedCustomerMeals =
+		customerStore.savedCustomerMealsWithEvaluation.use();
 
-	const instance_beverage = customerStore.instances.beverage.get();
-	const instance_ingredient = customerStore.instances.ingredient.get();
 	const instance_recipe = customerStore.instances.recipe.get();
-
-	const savedCustomerMeals = useMemo(() => {
-		if (currentCustomerName === null) {
-			return null;
-		}
-
-		const customerMeals = currentSavedMeals[currentCustomerName];
-		if (customerMeals === undefined || checkLengthEmpty(customerMeals)) {
-			return null;
-		}
-
-		const visibleIndices: number[] = [];
-
-		customerMeals.forEach(
-			(
-				{
-					beverage: beverageName,
-					recipe: {
-						extraIngredients: extraIngredientNames,
-						name: recipeName,
-					},
-				},
-				index
-			) => {
-				let beverageDlc: TDlc;
-				let recipeDlc: TDlc;
-				let hasHiddenIngredientDlc: boolean;
-
-				try {
-					beverageDlc = instance_beverage.getPropsByName(
-						beverageName,
-						'dlc'
-					);
-					recipeDlc = instance_recipe.getPropsByName(
-						recipeName,
-						'dlc'
-					);
-					hasHiddenIngredientDlc = extraIngredientNames.some(
-						(ingredientName) =>
-							hiddenDlcs.has(
-								instance_ingredient.getPropsByName(
-									ingredientName,
-									'dlc'
-								)
-							)
-					);
-				} catch {
-					return;
-				}
-
-				if (
-					!hasHiddenIngredientDlc &&
-					!hiddenDlcs.has(beverageDlc) &&
-					!hiddenDlcs.has(recipeDlc)
-				) {
-					visibleIndices.push(index);
-				}
-			}
-		);
-
-		if (checkLengthEmpty(visibleIndices)) {
-			return null;
-		}
-
-		return { data: customerMeals, order: visibleIndices };
-	}, [
-		currentCustomerName,
-		currentSavedMeals,
-		hiddenDlcs,
-		instance_beverage,
-		instance_ingredient,
-		instance_recipe,
-	]);
-
-	const savedCustomerMealsData = savedCustomerMeals?.data ?? null;
-	const savedCustomerMealsOrder = savedCustomerMeals?.order ?? null;
 
 	let content: IFadeMotionDivProps['children'];
 	let contentTarget: IFadeMotionDivProps['target'];
 
 	if (
 		currentCustomerName === null ||
-		savedCustomerMealsData === null ||
-		savedCustomerMealsOrder === null
+		currentCustomerMeals === null ||
+		savedCustomerMeals === null
 	) {
 		content = null;
 		contentTarget = 'null';
@@ -218,30 +85,16 @@ export default function SavedMealCard() {
 
 			const nextIndex =
 				direction === MoveButton.direction.down ? index + 1 : index - 1;
+			const newData = swapSavedMeals({
+				currentMeals: currentCustomerMeals,
+				nextVisibleIndex: nextIndex,
+				savedMeals: savedCustomerMeals,
+				visibleIndex: index,
+			});
 
-			if (nextIndex < 0 || nextIndex >= savedCustomerMealsOrder.length) {
+			if (newData === null) {
 				return;
 			}
-
-			const currentDataIndex = savedCustomerMealsOrder[index];
-			const nextDataIndex = savedCustomerMealsOrder[nextIndex];
-
-			if (currentDataIndex === undefined || nextDataIndex === undefined) {
-				return;
-			}
-
-			const newData = copyArray(savedCustomerMealsData);
-			const currentMeal = newData[currentDataIndex];
-			const nextMeal = newData[nextDataIndex];
-
-			if (currentMeal === undefined || nextMeal === undefined) {
-				return;
-			}
-
-			[newData[currentDataIndex], newData[nextDataIndex]] = [
-				nextMeal,
-				currentMeal,
-			];
 
 			customerStore.persistence.meals[currentCustomerName]?.set(newData);
 		};
@@ -257,39 +110,28 @@ export default function SavedMealCard() {
 				}}
 			>
 				<div className="space-y-3 p-4 xl:space-y-2 xl:px-2 xl:py-3">
-					{savedCustomerMealsOrder.map((dataIndex, loopIndex) => {
-						const meal = savedCustomerMealsData[dataIndex];
-						if (meal === undefined) {
-							return;
-						}
-						const {
-							beverage,
-							hasMystiaCooker,
-							order: customerOrder,
-							recipe: recipeData,
-						} = meal;
-						return (
+					{savedCustomerMeals.map(
+						(
+							{
+								dataIndex,
+								evaluation: {
+									isDarkMatter,
+									price,
+									rating: ratingKey,
+								},
+								meal: {
+									beverage,
+									hasMystiaCooker,
+									order: customerOrder,
+									recipe: recipeData,
+								},
+							},
+							loopIndex
+						) => (
 							<Fragment key={dataIndex}>
 								<div className="relative flex flex-col items-center gap-4 md:static md:flex-row md:gap-3 lg:gap-4 xl:gap-3">
 									<div className="flex flex-1 flex-col flex-wrap items-center gap-3 md:flex-row md:flex-nowrap md:gap-2 lg:gap-3 xl:gap-2">
 										{(() => {
-											const {
-												isDarkMatter,
-												price,
-												rating: ratingKey,
-											} = customerStore.evaluateSavedMealResult(
-												{
-													beverageName: beverage,
-													customerName:
-														currentCustomerName,
-													customerOrder,
-													hasMystiaCooker,
-													isFamousShop,
-													popularTrend:
-														currentCustomerPopularTrend,
-													recipeData,
-												}
-											);
 											const isDarkMatterOrNormalMeal =
 												isDarkMatter ||
 												!hasMystiaCooker;
@@ -306,31 +148,31 @@ export default function SavedMealCard() {
 												? DARK_MATTER_META_MAP.name
 												: recipeData.name;
 											const rating =
-												CUSTOMER_RATING_MAP[ratingKey];
+												ratingKey === null
+													? '未评级'
+													: CUSTOMER_RATING_MAP[
+															ratingKey
+														];
+											const ratingColor =
+												ratingKey ?? 'default';
 											const beverageLabel = `点击：在新窗口中查看酒水【${beverage}】的详情`;
 											const cookerLabel = `点击：在新窗口中查看厨具【${cooker}】的详情`;
 											const recipeLabel = `点击：在新窗口中查看料理【${recipeName}】的详情`;
 											return (
 												<>
-													<Popover
-														showArrow
-														color={ratingKey}
-														offset={12}
+													<RatingAvatarShell
+														color={ratingColor}
+														content={rating}
 														placement="left"
-													>
-														<Tooltip
-															showArrow
-															color={ratingKey}
-															content={rating}
-															placement="left"
-														>
+														popoverOffset={12}
+														trigger={
 															<span className="cursor-pointer">
 																<PopoverTrigger>
 																	<Avatar
 																		isBordered
 																		showFallback
 																		color={
-																			ratingKey
+																			ratingColor
 																		}
 																		fallback={
 																			<TagGroup className="h-4 flex-nowrap items-center whitespace-nowrap">
@@ -381,11 +223,8 @@ export default function SavedMealCard() {
 																	/>
 																</PopoverTrigger>
 															</span>
-														</Tooltip>
-														<PopoverContent>
-															{rating}
-														</PopoverContent>
-													</Popover>
+														}
+													/>
 													<div className="flex items-center gap-2 xl:gap-1">
 														<Tooltip
 															showArrow
@@ -470,225 +309,93 @@ export default function SavedMealCard() {
 											size={0.75}
 											className="md:mx-0 lg:mx-1 xl:mx-0"
 										/>
-										{(() => {
-											const originalIngredients =
-												instance_recipe.getPropsByName(
-													recipeData.name,
-													'ingredients'
-												);
-											const restExtraIngredientsLength =
-												Math.max(
-													5 -
-														originalIngredients.length,
-													0
-												);
-											const restExtraIngredients =
-												recipeData.extraIngredients.slice(
-													0,
-													restExtraIngredientsLength
-												);
-											return (
-												<div className="flex items-center gap-x-3 md:gap-x-1 lg:gap-x-3 xl:gap-x-1">
-													{originalIngredients.map(
-														(name, index) => {
-															const label = `点击：在新窗口中查看食材【${name}】的详情`;
-															return (
-																<Tooltip
-																	key={index}
-																	showArrow
-																	content={
-																		label
-																	}
-																	offset={4}
-																>
-																	<Sprite
-																		target="ingredient"
-																		name={
-																			name
-																		}
-																		size={2}
-																		onPress={() => {
-																			openWindow(
-																				'ingredients',
-																				name
-																			);
-																		}}
-																		aria-label={
-																			label
-																		}
-																		role="button"
-																	/>
-																</Tooltip>
-															);
-														}
-													)}
-													{!checkLengthEmpty(
-														restExtraIngredients
-													) && (
-														<div className="flex items-center gap-x-3 rounded bg-content2/70 outline outline-2 outline-offset-1 outline-content2 md:gap-x-1 lg:gap-x-3 xl:gap-x-1">
-															{restExtraIngredients.map(
-																(
-																	name,
-																	index
-																) => {
-																	const label = `点击：在新窗口中查看额外食材【${name}】的详情`;
-																	return (
-																		<Tooltip
-																			key={
-																				index
-																			}
-																			showArrow
-																			content={
-																				label
-																			}
-																			offset={
-																				4
-																			}
-																		>
-																			<Sprite
-																				target="ingredient"
-																				name={
-																					name
-																				}
-																				size={
-																					2
-																				}
-																				onPress={() => {
-																					openWindow(
-																						'ingredients',
-																						name
-																					);
-																				}}
-																				aria-label={
-																					label
-																				}
-																				role="button"
-																			/>
-																		</Tooltip>
-																	);
-																}
-															)}
-														</div>
-													)}
-												</div>
-											);
-										})()}
-									</div>
-									<div
-										className={cn(
-											'flex w-full flex-row-reverse items-center justify-center gap-2 md:w-auto xl:flex-col',
-											CLASSNAME_EXCLUDE_FROM_PIP
-										)}
-									>
-										<div
-											aria-hidden
-											className={cn(
-												'absolute -right-2 -top-1 flex flex-col gap-3 text-tiny text-primary/20 md:left-2 md:right-[unset] md:top-[unset] md:gap-6 xl:gap-9 dark:text-default-100',
-												{
-													hidden:
-														savedCustomerMealsOrder.length <=
-														1,
-												}
+										<SavedMealIngredientsStrip
+											className="md:gap-x-1 lg:gap-x-3 xl:gap-x-1"
+											extraIngredients={
+												recipeData.extraIngredients
+											}
+											extraIngredientsClassName="md:gap-x-1 lg:gap-x-3 xl:gap-x-1"
+											onOpenIngredient={(name) => {
+												openWindow('ingredients', name);
+											}}
+											originalIngredients={instance_recipe.getPropsByName(
+												recipeData.name,
+												'ingredients'
 											)}
-										>
-											<MoveButton
-												direction={
-													MoveButton.direction.up
-												}
-												isDisabled={loopIndex === 0}
-												onClick={() => {
-													moveMeal(
-														loopIndex,
-														MoveButton.direction.up
-													);
-												}}
-											/>
-											<MoveButton
-												direction={
-													MoveButton.direction.down
-												}
-												isDisabled={
-													loopIndex ===
-													savedCustomerMealsOrder.length -
-														1
-												}
-												onClick={() => {
-													moveMeal(
-														loopIndex,
-														MoveButton.direction
-															.down
-													);
-												}}
-											/>
-										</div>
-										<Button
-											fullWidth
-											color="primary"
-											size="sm"
-											variant="flat"
-											onPress={() => {
-												vibrate();
-												customerStore.shared.customer.hasMystiaCooker.set(
-													hasMystiaCooker
-												);
-												customerStore.shared.customer.order.set(
-													customerOrder
-												);
-												customerStore.shared.beverage.name.set(
-													beverage
-												);
-												customerStore.shared.recipe.data.set(
-													recipeData
-												);
-												trackEvent(
-													trackEvent.category.click,
-													'Select Button',
-													`${recipeData.name} - ${beverage}${checkLengthEmpty(recipeData.extraIngredients) ? '' : ` - ${recipeData.extraIngredients.join(' ')}`}`
-												);
-											}}
-											className="md:w-auto xl:h-6"
-										>
-											选择
-										</Button>
-										<Button
-											fullWidth
-											color="danger"
-											size="sm"
-											variant="flat"
-											onPress={() => {
-												vibrate();
-												const currentDataIndex =
-													savedCustomerMealsOrder[
-														loopIndex
-													];
-												const newData =
-													savedCustomerMealsData.filter(
-														(_, index) =>
-															index !==
-															currentDataIndex
-													);
-												customerStore.persistence.meals[
-													currentCustomerName
-												]?.set(newData);
-												trackEvent(
-													trackEvent.category.click,
-													'Remove Button',
-													`${recipeData.name} - ${beverage}${checkLengthEmpty(recipeData.extraIngredients) ? '' : ` - ${recipeData.extraIngredients.join(' ')}`}`
-												);
-											}}
-											className="md:w-auto xl:h-6"
-										>
-											删除
-										</Button>
+										/>
 									</div>
+									<SavedMealActionRail
+										className={cn(
+											CLASSNAME_EXCLUDE_FROM_PIP,
+											'xl:flex-col'
+										)}
+										isMoveDownDisabled={
+											loopIndex ===
+											savedCustomerMeals.length - 1
+										}
+										isMoveUpDisabled={loopIndex === 0}
+										isReorderVisible={
+											savedCustomerMeals.length > 1
+										}
+										onMoveDown={() => {
+											moveMeal(
+												loopIndex,
+												MoveButton.direction.down
+											);
+										}}
+										onMoveUp={() => {
+											moveMeal(
+												loopIndex,
+												MoveButton.direction.up
+											);
+										}}
+										onRemove={() => {
+											vibrate();
+											const newData =
+												currentCustomerMeals.filter(
+													(_, index) =>
+														index !== dataIndex
+												);
+											customerStore.persistence.meals[
+												currentCustomerName
+											]?.set(newData);
+											trackEvent(
+												trackEvent.category.click,
+												'Remove Button',
+												`${recipeData.name} - ${beverage}${recipeData.extraIngredients.length === 0 ? '' : ` - ${recipeData.extraIngredients.join(' ')}`}`
+											);
+										}}
+										onSelect={() => {
+											vibrate();
+											customerStore.shared.customer.hasMystiaCooker.set(
+												hasMystiaCooker
+											);
+											customerStore.shared.customer.order.set(
+												customerOrder
+											);
+											customerStore.shared.beverage.name.set(
+												beverage
+											);
+											customerStore.shared.recipe.data.set(
+												recipeData
+											);
+											trackEvent(
+												trackEvent.category.click,
+												'Select Button',
+												`${recipeData.name} - ${beverage}${recipeData.extraIngredients.length === 0 ? '' : ` - ${recipeData.extraIngredients.join(' ')}`}`
+											);
+										}}
+										removeButtonClassName="xl:h-6"
+										reorderButtonsClassName="md:left-2 md:right-[unset] md:top-[unset] md:gap-6 xl:gap-9"
+										selectButtonClassName="xl:h-6"
+									/>
 								</div>
-								{loopIndex <
-									savedCustomerMealsOrder.length - 1 && (
+								{loopIndex < savedCustomerMeals.length - 1 && (
 									<Divider />
 								)}
 							</Fragment>
-						);
-					})}
+						)
+					)}
 				</div>
 			</Card>
 		);

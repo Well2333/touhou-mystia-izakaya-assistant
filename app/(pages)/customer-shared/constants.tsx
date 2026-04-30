@@ -3,9 +3,13 @@ import { type Config } from 'use-breakpoint';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faCaretDown, faCaretUp } from '@fortawesome/free-solid-svg-icons';
 
-import { type TTableColumns as TBeverageTableColumns } from './beverageTabContent';
-import { type TTableColumns as TRecipeTableColumns } from './recipeTabContent';
-import type { TCustomerTabStyleMap, TIngredientsTabStyleMap } from './types';
+import type {
+	ITableColumn,
+	TBeverageTableColumnKey,
+	TCustomerTabStyleMap,
+	TIngredientsTabStyleMap,
+	TRecipeTableColumnKey,
+} from '@/(pages)/customer-shared/types';
 
 export const customerTabStyleMap = {
 	collapse: {
@@ -68,7 +72,7 @@ export const beverageTableColumns = [
 	{ key: 'price', label: '售价', sortable: true },
 	{ key: 'suitability', label: '匹配度', sortable: true },
 	{ key: 'action', label: '操作', sortable: false },
-] as const satisfies TBeverageTableColumns;
+] as const satisfies ReadonlyArray<ITableColumn<TBeverageTableColumnKey>>;
 
 export const recipeTableColumns = [
 	{ key: 'recipe', label: '料理', sortable: true },
@@ -78,7 +82,7 @@ export const recipeTableColumns = [
 	{ key: 'suitability', label: '匹配度', sortable: true },
 	{ key: 'time', label: '烹饪时间', sortable: true },
 	{ key: 'action', label: '操作', sortable: false },
-] as const satisfies TRecipeTableColumns;
+] as const satisfies ReadonlyArray<ITableColumn<TRecipeTableColumnKey>>;
 
 export const tabVisibilityStateMap = {
 	collapse: 'collapse',

@@ -5,12 +5,11 @@ import { useRouter } from 'next/navigation';
 
 import useBreakpoint from 'use-breakpoint';
 import {
-	useFilteredData,
+	useCustomerRouteData,
+	useDocumentTitle,
+	useIngredientRouteData,
 	useMounted,
 	usePathname,
-	useSearchResult,
-	useSortedData,
-	useThrottle,
 	useVibrate,
 } from '@/hooks';
 
@@ -44,15 +43,15 @@ import {
 	customerTabStyleMap,
 	ingredientTabStyleMap,
 	tachieBreakPointMap,
-} from '../constants';
+} from '@/(pages)/customer-shared/constants';
 import { siteConfig } from '@/configs';
 import { type TCustomerRareName } from '@/data';
 import { customerRareStore as customerStore, globalStore } from '@/stores';
-import { checkLengthEmpty, filterItems, getPageTitle } from '@/utilities';
+import { checkLengthEmpty, getPageTitle, memoize } from '@/utilities';
 
 const { enName, name: zhName } = siteConfig;
 
-function validateName(name: string | undefined) {
+const validateName = memoize(function validateName(name: string | undefined) {
 	const instance_customer = customerStore.instances.customer.get();
 
 	try {
@@ -62,35 +61,23 @@ function validateName(name: string | undefined) {
 	} catch {
 		return null;
 	}
-}
+});
 
 export default function Content() {
 	const { pathname } = usePathname();
 	const router = useRouter();
 
+	const [, , routeCustomerName] = pathname.split('/');
+	const validName = validateName(routeCustomerName);
+	const hasCustomerPath =
+		routeCustomerName !== undefined && routeCustomerName !== '';
+	const title = `${validName === null ? '' : `${validName} | `}${getPageTitle('/customer-rare')} | ${zhName} - ${enName}`;
+
+	useDocumentTitle(title, '/customer-rare');
+
 	useEffect(() => {
-		const validName = validateName(pathname.split('/')[2]);
-
 		customerStore.shared.customer.name.set(validName);
-
-		const title = `${validName === null ? '' : `${validName} | `}${getPageTitle('/customer-rare')} | ${zhName} - ${enName}`;
-		const observer = new MutationObserver((_, ob) => {
-			if (
-				location.pathname.startsWith('/customer-rare') &&
-				document.title.trim() !== title
-			) {
-				document.title = title;
-				ob.disconnect();
-			}
-		});
-
-		document.title = title;
-		observer.observe(document.head, { childList: true });
-
-		return () => {
-			observer.disconnect();
-		};
-	}, [pathname]);
+	}, [validName]);
 
 	const { breakpoint } = useBreakpoint(tachieBreakPointMap, 'noTachie');
 	const isReducedMotion = useReducedMotion();
@@ -104,6 +91,10 @@ export default function Content() {
 
 	const isFirstRendering = useRef(true);
 	useEffect(() => {
+		if (hasCustomerPath && validName === null) {
+			router.replace('/customer-rare');
+			return;
+		}
 		if (isFirstRendering.current) {
 			isFirstRendering.current = false;
 			return;
@@ -111,9 +102,14 @@ export default function Content() {
 		if (currentCustomerName === null) {
 			router.replace('/customer-rare');
 		}
-	}, [currentCustomerName, router]);
+	}, [currentCustomerName, hasCustomerPath, router, validName]);
 
 	const instance_customer = customerStore.instances.customer.get();
+
+	const { customerSortedData } = useCustomerRouteData(
+		instance_customer,
+		customerStore
+	);
 
 	const availableCustomerDlcs = customerStore.availableCustomerDlcs.use();
 	const availableCustomerNames = customerStore.availableCustomerNames.use();
@@ -124,12 +120,6 @@ export default function Content() {
 
 	const customerSearchValue =
 		customerStore.persistence.customer.searchValue.use();
-	const throttledCustomerSearchValue = useThrottle(customerSearchValue);
-
-	const customerSearchResult = useSearchResult(
-		instance_customer,
-		throttledCustomerSearchValue
-	);
 
 	const customerFilterDlcs =
 		customerStore.persistence.customer.filters.dlcs.use();
@@ -141,49 +131,6 @@ export default function Content() {
 		customerStore.persistence.customer.filters.includes.use();
 	const customerFilterExcludes =
 		customerStore.persistence.customer.filters.excludes.use();
-
-	const filterCustomerData = useCallback(() => {
-		const filtered = filterItems(customerSearchResult, [
-			{
-				field: 'name',
-				match: 'excludeIn',
-				values: customerFilterExcludes,
-			},
-			{ field: 'dlc', match: 'in', values: customerFilterDlcs },
-			{ field: 'places', match: 'any', values: customerFilterPlaces },
-			{
-				field: 'places',
-				match: 'excludeAny',
-				values: customerFilterNoPlaces,
-			},
-		]);
-		if (checkLengthEmpty(customerFilterIncludes)) {
-			return filtered;
-		}
-		const filteredNames = new Set(filtered.map(({ name }) => name));
-		return customerSearchResult.filter(
-			({ name }) =>
-				filteredNames.has(name) || customerFilterIncludes.includes(name)
-		);
-	}, [
-		customerFilterDlcs,
-		customerFilterExcludes,
-		customerFilterIncludes,
-		customerFilterNoPlaces,
-		customerFilterPlaces,
-		customerSearchResult,
-	]);
-
-	const customerFilteredData = useFilteredData(
-		instance_customer,
-		filterCustomerData
-	);
-
-	const customerSortedData = useSortedData(
-		instance_customer,
-		customerFilteredData,
-		customerPinyinSortState
-	);
 
 	const customerPinyinSortConfig = useMemo<IPinyinSortConfig>(
 		() => ({
@@ -265,11 +212,8 @@ export default function Content() {
 	const isCustomerTabFilterVisible =
 		customerStore.shared.customer.filterVisibility.use();
 
-	const currentCustomerPopularTrend =
-		customerStore.shared.customer.popularTrend.use();
-	const isFamousShop = customerStore.shared.customer.famousShop.use();
-
-	const instance_ingredient = customerStore.instances.ingredient.get();
+	const { ingredientFilteredData, ingredientSortedData } =
+		useIngredientRouteData(customerStore);
 
 	const availableIngredientDlcs = customerStore.availableIngredientDlcs.use();
 	const availableIngredientLevels =
@@ -287,64 +231,6 @@ export default function Content() {
 		customerStore.persistence.ingredient.filters.noTags.use();
 	const ingredientFilterLevels =
 		customerStore.persistence.ingredient.filters.levels.use();
-
-	const hiddenIngredients =
-		customerStore.shared.recipe.table.hiddenIngredients.use();
-
-	const filterIngredientData = useCallback(() => {
-		const augmented = instance_ingredient.data
-			.filter(
-				({ name }) =>
-					!instance_ingredient.blockedIngredients.has(name) &&
-					!hiddenIngredients.has(name)
-			)
-			.map((item) => ({
-				...item,
-				_tagsWithTrend: instance_ingredient.calculateTagsWithTrend(
-					item.tags,
-					currentCustomerPopularTrend,
-					isFamousShop
-				),
-			}));
-		const filtered = filterItems(augmented, [
-			{ field: 'dlc', match: 'in', values: ingredientFilterDlcs },
-			{
-				field: '_tagsWithTrend',
-				match: 'all',
-				values: ingredientFilterTags,
-			},
-			{
-				field: '_tagsWithTrend',
-				match: 'excludeAny',
-				values: ingredientFilterNoTags,
-			},
-			{ field: 'level', match: 'in', values: ingredientFilterLevels },
-		]);
-		const filteredNames = new Set(filtered.map(({ name }) => name));
-		return instance_ingredient.data.filter(({ name }) =>
-			filteredNames.has(name)
-		);
-	}, [
-		currentCustomerPopularTrend,
-		hiddenIngredients,
-		ingredientFilterDlcs,
-		ingredientFilterLevels,
-		ingredientFilterNoTags,
-		ingredientFilterTags,
-		instance_ingredient,
-		isFamousShop,
-	]);
-
-	const ingredientFilteredData = useFilteredData(
-		instance_ingredient,
-		filterIngredientData
-	);
-
-	const ingredientSortedData = useSortedData(
-		instance_ingredient,
-		ingredientFilteredData,
-		ingredientPinyinSortState
-	);
 
 	const ingredientPinyinSortConfig = useMemo<IPinyinSortConfig>(
 		() => ({

@@ -1,54 +1,30 @@
 import { memo, useCallback, useMemo } from 'react';
-import { curry, curryRight, debounce } from 'lodash';
 
 import { useVibrate } from '@/hooks';
 
-import {
-	Badge,
-	Button,
-	ScrollShadow,
-	Tooltip,
-	cn,
-} from '@/design/ui/components';
-
-import { type IIngredientTabContentProps } from '@/(pages)/customer-rare/ingredientTabContent';
 import Placeholder from '@/components/placeholder';
-import PressElement from '@/components/pressElement';
-import Sprite from '@/components/sprite';
 
-import {
-	DARK_MATTER_META_MAP,
-	DYNAMIC_TAG_MAP,
-	type TIngredientName,
-	type TIngredientTag,
-	type TRecipeTag,
-} from '@/data';
+import IngredientTabContentSkeleton from '@/(pages)/customer-shared/ingredientTabContentSkeleton';
+import IngredientTabItemPresenter from '@/(pages)/customer-shared/ingredientTabItemPresenter';
+
+import type { IIngredientTabContentProps } from '@/(pages)/customer-shared/ingredientTabContentTypes';
+import { DARK_MATTER_META_MAP, type TIngredientName } from '@/data';
 import { customerNormalStore as store } from '@/stores';
-import {
-	checkA11yConfirmKey,
-	checkLengthEmpty,
-	intersection,
-	toArray,
-	toGetItemWithKey,
-	toSet,
-	union,
-} from '@/utilities';
-import type { TRecipe } from '@/utils/types';
+import { checkLengthEmpty, toSet } from '@/utilities';
 
-export default memo<IIngredientTabContentProps>(function IngredientsTabContent({
+interface IProps extends IIngredientTabContentProps {}
+
+export default memo<IProps>(function IngredientTabContent({
 	ingredientTabStyle,
 	sortedData,
 }) {
 	const vibrate = useVibrate();
 
 	const currentCustomerName = store.shared.customer.name.use();
-	const currentCustomerPopularTrend =
-		store.shared.customer.popularTrend.use();
 	const currentRecipeData = store.shared.recipe.data.use();
-	const isFamousShop = store.shared.customer.famousShop.use();
+	const { changesByName, darkIngredientNames } =
+		store.ingredientScoreChanges.use();
 
-	const instance_customer = store.instances.customer.get();
-	const instance_ingredient = store.instances.ingredient.get();
 	const instance_recipe = store.instances.recipe.get();
 
 	const currentRecipe = useMemo(
@@ -60,21 +36,13 @@ export default memo<IIngredientTabContentProps>(function IngredientsTabContent({
 	);
 
 	const darkIngredients = useMemo(
-		() =>
-			toSet(
-				sortedData
-					.filter(
-						({ tags }) =>
-							!checkLengthEmpty(
-								intersection(
-									tags,
-									currentRecipe?.negativeTags ?? []
-								)
-							)
-					)
-					.map(toGetItemWithKey('name'))
-			),
-		[currentRecipe?.negativeTags, sortedData]
+		() => toSet(darkIngredientNames),
+		[darkIngredientNames]
+	);
+
+	const darkIngredientRows = useMemo(
+		() => sortedData.filter(({ name }) => darkIngredients.has(name)),
+		[darkIngredients, sortedData]
 	);
 
 	const data = useMemo(
@@ -95,7 +63,11 @@ export default memo<IIngredientTabContentProps>(function IngredientsTabContent({
 		[vibrate]
 	);
 
-	if (currentCustomerName === null || currentRecipeData === null) {
+	if (
+		currentCustomerName === null ||
+		currentRecipe === null ||
+		currentRecipeData === null
+	) {
 		return null;
 	}
 
@@ -107,253 +79,82 @@ export default memo<IIngredientTabContentProps>(function IngredientsTabContent({
 		);
 	}
 
-	const customerPositiveTags = instance_customer.getPropsByName(
-		currentCustomerName,
-		'positiveTags'
-	);
-
-	const { extraIngredients: currentRecipeExtraIngredients } =
-		currentRecipeData;
-
-	// Checked `currentRecipe` is not null above.
-	const _nonNullableRecipe = currentRecipe as TRecipe;
-
-	const {
-		ingredients: currentRecipeIngredients,
-		positiveTags: currentRecipePositiveTags,
-	} = _nonNullableRecipe;
+	const { ingredients: currentRecipeIngredients } = currentRecipe;
 
 	const isFullFilled =
 		currentRecipeIngredients.length +
-			currentRecipeExtraIngredients.length >=
+			currentRecipeData.extraIngredients.length >=
 		5;
-	const isLargePartitionTagNext =
-		currentRecipeIngredients.length +
-			currentRecipeExtraIngredients.length ===
-		4;
-	const shouldCalculateLargePartitionTag =
-		isLargePartitionTagNext &&
-		currentCustomerPopularTrend.tag === DYNAMIC_TAG_MAP.largePartition;
-
-	const calculateIngredientTagsWithTrend = curryRight(
-		instance_ingredient.calculateTagsWithTrend
-	)(currentCustomerPopularTrend, isFamousShop);
-	const calculateRecipeTagsWithTrend = curryRight(
-		instance_recipe.calculateTagsWithTrend
-	)(currentCustomerPopularTrend, isFamousShop);
-	const composeRecipeTagsWithPopularTrend = curry(
-		instance_recipe.composeTagsWithPopularTrend
-	)(
-		currentRecipeIngredients,
-		currentRecipeExtraIngredients,
-		currentRecipePositiveTags,
-		curry.placeholder,
-		currentCustomerPopularTrend
-	);
-
-	const currentRecipeExtraIngredientsTags =
-		currentRecipeExtraIngredients.flatMap((extraIngredient) =>
-			instance_ingredient.getPropsByName(extraIngredient, 'tags')
-		);
-	const currentRecipeExtraIngredientsTagsWithTrend =
-		calculateIngredientTagsWithTrend(currentRecipeExtraIngredientsTags);
-	const currentRecipeComposedTags = composeRecipeTagsWithPopularTrend(
-		currentRecipeExtraIngredientsTagsWithTrend
-	);
-	const currentRecipeTagsWithTrend = union(
-		calculateRecipeTagsWithTrend(currentRecipeComposedTags)
+	const darkIngredientSection = checkLengthEmpty(
+		darkIngredientRows
+	) ? null : (
+		<>
+			<div className="my-4 flex items-center">
+				<div className="h-px w-full bg-foreground-300" />
+				<div className="select-none whitespace-nowrap text-small font-light text-foreground-500">
+					制作{DARK_MATTER_META_MAP.name}？
+				</div>
+				<div className="h-px w-full bg-foreground-300" />
+			</div>
+			<div className="m-2 grid grid-cols-fill-12 justify-around gap-4">
+				{darkIngredientRows.map(({ name }, index) => (
+					<IngredientTabItemPresenter
+						key={index}
+						kind="static"
+						name={name}
+					/>
+				))}
+			</div>
+		</>
 	);
 
 	return (
-		<>
-			<ScrollShadow
-				className={cn(
-					'px-2 transition-all motion-reduce:transition-none xl:max-h-[calc(var(--safe-h-dvh)-10.25rem-env(titlebar-area-height,0rem))]',
-					ingredientTabStyle.classNames.content
-				)}
-			>
-				<div className="m-2 grid grid-cols-fill-12 justify-around gap-4">
-					{data.map(({ name, tags }, index) => {
-						if (isFullFilled) {
-							return (
-								<div
-									key={index}
-									className="flex cursor-not-allowed flex-col items-center opacity-40 brightness-50 dark:opacity-80"
-								>
-									<Sprite
-										target="ingredient"
-										name={name}
-										size={3}
-									/>
-									<span className="whitespace-nowrap text-center text-tiny">
-										{name}
-									</span>
-								</div>
-							);
-						}
+		<IngredientTabContentSkeleton
+			afterMainGrid={darkIngredientSection}
+			ingredientTabStyle={ingredientTabStyle}
+			onToggle={handleButtonPress}
+		>
+			{data.map(({ name }, index) => {
+				const ingredientScoreChange = changesByName[name];
+				const scoreChange = ingredientScoreChange?.scoreChange ?? 0;
 
-						const tagsWithTrend = calculateIngredientTagsWithTrend(
-							tags
-						) as TRecipeTag[];
-						const allTagsWithTrend = union(
-							currentRecipeTagsWithTrend,
-							tagsWithTrend
-						);
+				if (isFullFilled) {
+					return (
+						<IngredientTabItemPresenter
+							key={index}
+							className="opacity-40 brightness-50 dark:opacity-80"
+							kind="static"
+							name={name}
+						/>
+					);
+				}
 
-						const before = composeRecipeTagsWithPopularTrend(
-							currentRecipeTagsWithTrend as TIngredientTag[]
-						);
-						const after = composeRecipeTagsWithPopularTrend(
-							allTagsWithTrend as TIngredientTag[]
-						);
+				const isDown = scoreChange < 0;
+				const isUp = scoreChange > 0;
+				const isNoChange = scoreChange === 0;
 
-						let scoreChange =
-							instance_recipe.getIngredientScoreChange(
-								before,
-								after,
-								customerPositiveTags
-							);
+				const color = isUp ? 'success' : isDown ? 'danger' : 'default';
+				const score = isUp ? `+${scoreChange}` : `${scoreChange}`;
 
-						// The customer like the large partition tag.
-						scoreChange += Number(
-							isLargePartitionTagNext &&
-								(customerPositiveTags as TRecipeTag[]).includes(
-									DYNAMIC_TAG_MAP.largePartition
-								) &&
-								!before.includes(DYNAMIC_TAG_MAP.largePartition)
-						);
+				const badgeContent = isNoChange ? '' : score;
+				const tooltipContent = `点击：加入额外食材【${name}】${isNoChange ? '' : `，匹配度${score}`}`;
 
-						// The current popular tag is the large partition tag and the customer has popular tags.
-						scoreChange += Number(
-							shouldCalculateLargePartitionTag &&
-								(customerPositiveTags as TRecipeTag[]).includes(
-									DYNAMIC_TAG_MAP.popularNegative
-								) &&
-								currentCustomerPopularTrend.isNegative
-						);
-						scoreChange += Number(
-							shouldCalculateLargePartitionTag &&
-								(customerPositiveTags as TRecipeTag[]).includes(
-									DYNAMIC_TAG_MAP.popularPositive
-								) &&
-								!currentCustomerPopularTrend.isNegative
-						);
-
-						const isDown = scoreChange < 0;
-						const isUp = scoreChange > 0;
-						const isNoChange = scoreChange === 0;
-
-						const color = isUp
-							? 'success'
-							: isDown
-								? 'danger'
-								: 'default';
-						const score = isUp
-							? `+${scoreChange}`
-							: `${scoreChange}`;
-
-						const badgeContent = isNoChange ? '' : score;
-						const tooltipContent = `点击：加入额外食材【${name}】${isNoChange ? '' : `，匹配度${score}`}`;
-
-						return (
-							<Tooltip
-								key={index}
-								disableBlur
-								showArrow
-								closeDelay={0}
-								color={color}
-								content={tooltipContent}
-								offset={scoreChange > 1 ? 10 : 7}
-								size="sm"
-							>
-								<PressElement
-									as="div"
-									onPress={() => {
-										handleSelect(name);
-									}}
-									role="button"
-									tabIndex={0}
-									aria-label={tooltipContent}
-									className={cn(
-										'group flex cursor-pointer flex-col items-center transition motion-reduce:transition-none',
-										{
-											'opacity-40 brightness-50 hover:opacity-100 hover:brightness-100 dark:opacity-80 dark:hover:opacity-100':
-												isNoChange,
-										}
-									)}
-								>
-									<Badge
-										color={color}
-										content={badgeContent}
-										isInvisible={isNoChange}
-										size="sm"
-										classNames={{
-											badge: cn('font-mono', {
-												'brightness-125':
-													scoreChange > 2,
-												'scale-125 font-medium':
-													scoreChange > 1,
-											}),
-											base: 'group-hover:drop-shadow-md',
-										}}
-									>
-										<Sprite
-											target="ingredient"
-											name={name}
-											size={3}
-											className="transition group-hover:scale-105 motion-reduce:transition-none"
-										/>
-									</Badge>
-									<span className="whitespace-nowrap text-center text-tiny text-default-800 transition-colors group-hover:text-default-900 motion-reduce:transition-none">
-										{name}
-									</span>
-								</PressElement>
-							</Tooltip>
-						);
-					})}
-				</div>
-				{!checkLengthEmpty(darkIngredients) && (
-					<>
-						<div className="my-4 flex items-center">
-							<div className="h-px w-full bg-foreground-300" />
-							<div className="select-none whitespace-nowrap text-small font-light text-foreground-500">
-								制作{DARK_MATTER_META_MAP.name}？
-							</div>
-							<div className="h-px w-full bg-foreground-300" />
-						</div>
-						<div className="m-2 grid grid-cols-fill-12 justify-around gap-4">
-							{toArray(darkIngredients).map((name, index) => (
-								<div
-									key={index}
-									className="flex cursor-not-allowed flex-col items-center"
-								>
-									<Sprite
-										target="ingredient"
-										name={name}
-										size={3}
-									/>
-									<span className="whitespace-nowrap text-center text-tiny">
-										{name}
-									</span>
-								</div>
-							))}
-						</div>
-					</>
-				)}
-			</ScrollShadow>
-			<div className="flex justify-center xl:hidden">
-				<Button
-					isIconOnly
-					size="sm"
-					variant="flat"
-					onClick={handleButtonPress}
-					onKeyDown={debounce(checkA11yConfirmKey(handleButtonPress))}
-					aria-label={ingredientTabStyle.ariaLabel}
-					className="h-4 w-4/5 text-default-400"
-				>
-					{ingredientTabStyle.buttonNode}
-				</Button>
-			</div>
-		</>
+				return (
+					<IngredientTabItemPresenter
+						key={index}
+						badgeContent={badgeContent}
+						color={color}
+						isNoChange={isNoChange}
+						kind="interactive"
+						name={name}
+						onPress={() => {
+							handleSelect(name);
+						}}
+						scoreChange={scoreChange}
+						tooltipContent={tooltipContent}
+					/>
+				);
+			})}
+		</IngredientTabContentSkeleton>
 	);
 });

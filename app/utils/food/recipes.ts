@@ -1,4 +1,4 @@
-import { isObject } from 'lodash';
+import { isNil, isObject } from 'lodash';
 
 import { Food } from './base';
 import { Ingredient } from './ingredients';
@@ -37,6 +37,30 @@ type TRecipe = Prettify<
 		positiveTags: TRecipeTag[];
 	}
 >;
+
+type TRecipeWithPinyin = TRecipe & { pinyin: string[] };
+
+type TRecipeSuitabilityRowData = TRecipeWithPinyin & {
+	matchedNegativeTags?: TRecipeTag[];
+	matchedPositiveTags: TRecipeTag[];
+	suitability: number;
+};
+
+function createRecipeSuitabilityRow(
+	recipe: TRecipeWithPinyin,
+	matchedPositiveTags: TRecipeTag[],
+	suitability: number,
+	positiveTags: TRecipeTag[] = recipe.positiveTags,
+	matchedNegativeTags?: TRecipeTag[]
+): TRecipeSuitabilityRowData {
+	return {
+		...recipe,
+		...(matchedNegativeTags === undefined ? {} : { matchedNegativeTags }),
+		matchedPositiveTags,
+		positiveTags,
+		suitability,
+	};
+}
 
 function extractPlacesFromRecipeFrom(from: IRecipe['from']) {
 	if (typeof from === 'string') {
@@ -239,6 +263,84 @@ export class Recipe extends Food<TRecipe[]> {
 		Recipe._bondRecipesCache.set(customerName, bondRecipes);
 
 		return bondRecipes;
+	}
+
+	/**
+	 * @description Build raw recipe suitability rows for table consumers without applying query-layer filtering, sorting or pagination.
+	 */
+	public buildRecipeSuitabilityRows({
+		customerNegativeTags,
+		customerPositiveTags,
+		getEasterEggScore,
+		isFamousShop,
+		popularTrend,
+	}: {
+		customerNegativeTags?: ReadonlyArray<TRecipeTag>;
+		customerPositiveTags?: ReadonlyArray<TRecipeTag> | null;
+		getEasterEggScore?: (
+			recipe: TRecipeWithPinyin
+		) => number | null | undefined;
+		isFamousShop: boolean;
+		popularTrend: IPopularTrend;
+	}): TRecipeSuitabilityRowData[] {
+		const data = this.data.filter(
+			({ name }) => !this.blockedRecipes.has(name)
+		);
+
+		if (isNil(customerPositiveTags)) {
+			return data.map((recipe) =>
+				createRecipeSuitabilityRow(
+					recipe,
+					[],
+					0,
+					recipe.positiveTags,
+					customerNegativeTags === undefined ? undefined : []
+				)
+			);
+		}
+
+		return data.map((recipe) => {
+			const recipeTagsWithTrend = this.calculateTagsWithTrend(
+				this.composeTagsWithPopularTrend(
+					recipe.ingredients,
+					[],
+					recipe.positiveTags,
+					[],
+					popularTrend
+				),
+				popularTrend,
+				isFamousShop
+			);
+			const easterEggScore = getEasterEggScore?.(recipe);
+
+			if (!isNil(easterEggScore)) {
+				return createRecipeSuitabilityRow(
+					recipe,
+					[],
+					easterEggScore > 0 ? Infinity : -Infinity,
+					recipeTagsWithTrend,
+					customerNegativeTags === undefined ? undefined : []
+				);
+			}
+
+			const {
+				negativeTags,
+				positiveTags: matchedPositiveTags,
+				suitability,
+			} = this.getCustomerSuitability(
+				recipeTagsWithTrend,
+				customerPositiveTags,
+				customerNegativeTags
+			);
+
+			return createRecipeSuitabilityRow(
+				recipe,
+				matchedPositiveTags,
+				suitability,
+				recipeTagsWithTrend,
+				customerNegativeTags === undefined ? undefined : negativeTags
+			);
+		});
 	}
 
 	/**

@@ -1,12 +1,6 @@
 import { type SortDescriptor } from '@heroui/table';
 
-import { type tabVisibilityStateMap } from './constants';
-import { type TBeverageTag, type TRecipeTag } from '@/data';
-import type { TBeverage, TRecipe } from '@/utils/types';
-
-export type TTabVisibilityState = ExtractCollectionValue<
-	typeof tabVisibilityStateMap
->;
+export type TTabVisibilityState = 'collapse' | 'expand';
 
 export interface ICustomerTabStyle {
 	ariaLabel: string;
@@ -43,23 +37,19 @@ export interface ITableSortDescriptor<T extends string> extends SortDescriptor {
 	time?: number;
 }
 
-interface IBeverageSuitability {
-	matchedTags: TBeverageTag[];
-	suitability: number;
-}
-
-export type TBeverageWithSuitability = Prettify<
-	TBeverage & IBeverageSuitability
->;
-export type TBeveragesWithSuitability = TBeverageWithSuitability[];
-
-interface IRecipeSuitability {
-	matchedNegativeTags: TRecipeTag[];
-	matchedPositiveTags: TRecipeTag[];
-	suitability: number;
-}
-
-export type TRecipeWithSuitability = Prettify<TRecipe & IRecipeSuitability>;
-export type TRecipesWithSuitability = TRecipeWithSuitability[];
-
 export type TTab = 'beverage' | 'customer' | 'ingredient' | 'recipe';
+
+export type TBeverageTableColumnKey =
+	| 'action'
+	| 'beverage'
+	| 'price'
+	| 'suitability';
+
+export type TRecipeTableColumnKey =
+	| 'action'
+	| 'cooker'
+	| 'ingredient'
+	| 'price'
+	| 'recipe'
+	| 'suitability'
+	| 'time';

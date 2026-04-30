@@ -5,7 +5,7 @@ import { driver } from 'driver.js';
 
 import { usePathname } from '@/hooks';
 
-import { PARAM_INFO } from '@/(pages)/customer-rare/infoButtonBase';
+import { PARAM_INFO } from '@/(pages)/customer-shared/infoButtonBase';
 import { trackEvent } from '@/components/analytics';
 
 import { DYNAMIC_TAG_MAP } from '@/data';
@@ -29,7 +29,7 @@ export default function CustomerRareTutorial() {
 
 	const currentBeverageName = customerStore.shared.beverage.name.use();
 	const currentBeverageTableDirection =
-		customerStore.persistence.beverage.table.sortDescriptor.direction?.use();
+		customerStore.persistence.beverage.table.sortDescriptor.use().direction;
 
 	const currentRecipeData = customerStore.shared.recipe.data.use();
 	const currentRecipeName = currentRecipeData?.name;
