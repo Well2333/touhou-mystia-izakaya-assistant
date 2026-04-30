@@ -1,5 +1,7 @@
-import { Fragment } from 'react';
+import { Fragment, useRef } from 'react';
 
+import { useSavedMealListKeys } from '@/(pages)/customer-shared/useSavedMealListKeys';
+import { useSavedMealReorderAnimation } from '@/(pages)/customer-shared/useSavedMealReorderAnimation';
 import { usePictureInPicture, useVibrate, useViewInNewWindow } from '@/hooks';
 
 import { Divider } from '@heroui/divider';
@@ -16,7 +18,6 @@ import {
 
 import SavedMealActionRail from '@/(pages)/customer-shared/savedMealActionRail';
 import SavedMealIngredientsStrip from '@/(pages)/customer-shared/savedMealIngredientsStrip';
-import { swapSavedMeals } from '@/(pages)/customer-shared/swapSavedMeals';
 import {
 	type IMoveButtonProps,
 	MoveButton,
@@ -26,6 +27,11 @@ import { Plus } from '@/(pages)/customer-shared/resultCardAtoms';
 import { trackEvent } from '@/components/analytics';
 import Sprite from '@/components/sprite';
 
+import {
+	isMealRecipeEqual,
+	removeFirstMatchingMeal,
+} from '@/(pages)/customer-shared/savedMealEquality';
+import { swapSavedMeals } from '@/(pages)/customer-shared/swapSavedMeals';
 import { CUSTOMER_RATING_MAP } from '@/data';
 import { customerNormalStore as customerStore, globalStore } from '@/stores';
 
@@ -40,6 +46,13 @@ export default function SavedMealCard() {
 	const openWindow = useViewInNewWindow();
 	const vibrate = useVibrate();
 
+	const {
+		animateSavedMealRemove,
+		animateSavedMealSwap,
+		registerSavedMealContent,
+		registerSavedMealRow,
+	} = useSavedMealReorderAnimation();
+
 	const isHighAppearance = globalStore.persistence.highAppearance.use();
 
 	const currentCustomerName = customerStore.shared.customer.name.use();
@@ -50,6 +63,17 @@ export default function SavedMealCard() {
 			: (savedMeals[currentCustomerName] ?? null);
 	const savedCustomerMeals =
 		customerStore.savedCustomerMealsWithEvaluation.use();
+
+	const { getSavedMealKey, removeSavedMealKey } = useSavedMealListKeys(
+		currentCustomerName,
+		currentCustomerMeals
+	);
+	const pendingRemoveDataRef = useRef<
+		Array<{
+			meal: NonNullable<typeof currentCustomerMeals>[number];
+			savedMealKey: string;
+		}>
+	>([]);
 
 	const instance_recipe = customerStore.instances.recipe.get();
 
@@ -83,7 +107,66 @@ export default function SavedMealCard() {
 				return;
 			}
 
+			const currentEntry = savedCustomerMeals[index];
+			const nextEntry = savedCustomerMeals[nextIndex];
+			if (currentEntry === undefined || nextEntry === undefined) {
+				return;
+			}
+
+			animateSavedMealSwap(currentEntry.dataIndex, nextEntry.dataIndex);
+
 			customerStore.persistence.meals[currentCustomerName]?.set(newData);
+		};
+
+		const removeMeal = async (
+			dataIndex: number,
+			savedMealKey: string,
+			dividerDataIndex: number | undefined,
+			nextRowDataIndex: number | undefined,
+			mealToRemove: (typeof currentCustomerMeals)[number],
+			beverage: (typeof currentCustomerMeals)[number]['beverage'],
+			recipeData: (typeof currentCustomerMeals)[number]['recipe']
+		) => {
+			pendingRemoveDataRef.current.push({
+				meal: mealToRemove,
+				savedMealKey,
+			});
+			vibrate();
+			await animateSavedMealRemove(dataIndex, {
+				collapseLayout: savedCustomerMeals.length > 1,
+				dividerDataIndex,
+				nextRowDataIndex,
+			});
+			const latestCustomerMeals =
+				customerStore.persistence.meals[currentCustomerName]?.get() ??
+				currentCustomerMeals;
+			const pendingRemoveData = pendingRemoveDataRef.current.splice(0);
+			if (pendingRemoveData.length > 0) {
+				const newData = pendingRemoveData.reduce(
+					(meals, { meal: targetMeal, savedMealKey: pendingKey }) => {
+						removeSavedMealKey(pendingKey);
+						return removeFirstMatchingMeal(
+							meals,
+							targetMeal,
+							(meal, pendingTargetMeal) =>
+								meal.beverage === pendingTargetMeal.beverage &&
+								isMealRecipeEqual(
+									meal.recipe,
+									pendingTargetMeal.recipe
+								)
+						);
+					},
+					latestCustomerMeals
+				);
+				customerStore.persistence.meals[currentCustomerName]?.set(
+					newData
+				);
+			}
+			trackEvent(
+				trackEvent.category.click,
+				'Remove Button',
+				`${recipeData.name}${beverage === null ? '' : ` - ${beverage}`}${recipeData.extraIngredients.length === 0 ? '' : ` - ${recipeData.extraIngredients.join(' ')}`}`
+			);
 		};
 
 		content = (
@@ -106,9 +189,17 @@ export default function SavedMealCard() {
 							},
 							loopIndex
 						) => (
-							<Fragment key={dataIndex}>
-								<div className="relative flex flex-col items-center gap-4 md:static md:flex-row">
-									<div className="flex flex-1 flex-col flex-wrap items-center gap-3 md:flex-row md:flex-nowrap">
+							<Fragment key={getSavedMealKey(dataIndex)}>
+								<div
+									ref={registerSavedMealRow(dataIndex)}
+									className="relative flex flex-col items-center gap-4 md:static md:flex-row"
+								>
+									<div
+										ref={registerSavedMealContent(
+											dataIndex
+										)}
+										className="flex flex-1 flex-col flex-wrap items-center gap-3 md:flex-row md:flex-nowrap"
+									>
 										{(() => {
 											const rating =
 												CUSTOMER_RATING_MAP[ratingKey];
@@ -273,19 +364,32 @@ export default function SavedMealCard() {
 											);
 										}}
 										onRemove={() => {
-											vibrate();
-											const newData =
-												currentCustomerMeals.filter(
-													(_, index) =>
-														index !== dataIndex
-												);
-											customerStore.persistence.meals[
-												currentCustomerName
-											]?.set(newData);
-											trackEvent(
-												trackEvent.category.click,
-												'Remove Button',
-												`${recipeData.name}${beverage === null ? '' : ` - ${beverage}`}${recipeData.extraIngredients.length === 0 ? '' : ` - ${recipeData.extraIngredients.join(' ')}`}`
+											const mealToRemove =
+												currentCustomerMeals[dataIndex];
+											if (mealToRemove === undefined) {
+												return;
+											}
+
+											const dividerDataIndex =
+												loopIndex <
+												savedCustomerMeals.length - 1
+													? dataIndex
+													: savedCustomerMeals[
+															loopIndex - 1
+														]?.dataIndex;
+											const nextRowDataIndex =
+												loopIndex === 0
+													? savedCustomerMeals[1]
+															?.dataIndex
+													: undefined;
+											void removeMeal(
+												dataIndex,
+												getSavedMealKey(dataIndex),
+												dividerDataIndex,
+												nextRowDataIndex,
+												mealToRemove,
+												beverage,
+												recipeData
 											);
 										}}
 										onSelect={() => {
